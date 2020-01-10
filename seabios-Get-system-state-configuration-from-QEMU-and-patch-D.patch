@@ -1,0 +1,191 @@
+From cc2aaf322883f3d31f4350c6303838b3a735c048 Mon Sep 17 00:00:00 2001
+Message-Id: <cc2aaf322883f3d31f4350c6303838b3a735c048.1347373749.git.minovotn@redhat.com>
+In-Reply-To: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+References: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+From: Gleb Natapov <gleb@redhat.com>
+Date: Mon, 3 Sep 2012 08:49:13 +0200
+Subject: [PATCH 7/7] Get system state configuration from QEMU and patch DSDT
+ with it.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1346662153-18382-8-git-send-email-gleb@redhat.com>
+Patchwork-id: 41586
+O-Subject: [PATCH RHEL6.4 7/7] Get system state configuration from QEMU and patch DSDT with it.
+Bugzilla: 827500
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+QEMU may want to disable guest's S3/S4 support and it wants to distinguish
+between regular powerdown and S4 powerdown. To support that new fw_cfg
+option was added that passes supported system states and what value should
+guest use to enter each state. States are passed in 6 byte array. Each
+byte represents one system state. If byte at offset X has its MSB set
+it means that system state X is supported and to enter it guest should
+use the value from lowest 7 bits. Patch also detects old QEMU and uses
+values that work in backwards compatible way there.
+
+Upstream: d51c4a0df1ae7bcb20ec3d569e409cf50f3ed760
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+
+---
+ src/acpi-dsdt.dsl  |   27 ---------------------------
+ src/acpi.c         |   36 ++++++++++++++++++++++++++++--------
+ src/ssdt-pcihp.dsl |   35 +++++++++++++++++++++++++++++++++++
+ 3 files changed, 63 insertions(+), 35 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi-dsdt.dsl  | 27 ---------------------------
+ src/acpi.c         | 36 ++++++++++++++++++++++++++++--------
+ src/ssdt-pcihp.dsl | 35 +++++++++++++++++++++++++++++++++++
+ 3 files changed, 63 insertions(+), 35 deletions(-)
+
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index 531846a..2a92abc 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -706,33 +706,6 @@ DefinitionBlock (
+         }
+     }
+ 
+-    /*
+-     * S3 (suspend-to-ram), S4 (suspend-to-disk) and S5 (power-off) type codes:
+-     * must match piix4 emulation.
+-     */
+-    Name (\_S3, Package (0x04)
+-    {
+-        0x01,  /* PM1a_CNT.SLP_TYP */
+-        0x01,  /* PM1b_CNT.SLP_TYP */
+-        Zero,  /* reserved */
+-        Zero   /* reserved */
+-    })
+-    Name (\_S4, Package (0x04)
+-    {
+-        Zero,  /* PM1a_CNT.SLP_TYP */
+-        Zero,  /* PM1b_CNT.SLP_TYP */
+-        Zero,  /* reserved */
+-        Zero   /* reserved */
+-    })
+-    Name (\_S5, Package (0x04)
+-    {
+-        Zero,  /* PM1a_CNT.SLP_TYP */
+-        Zero,  /* PM1b_CNT.SLP_TYP */
+-        Zero,  /* reserved */
+-        Zero   /* reserved */
+-    })
+-
+-    /* CPU hotplug */
+     Scope(\_SB) {
+         /* Objects filled in by run-time generated SSDT */
+         External(NTFY, MethodObj)
+diff --git a/src/acpi.c b/src/acpi.c
+index de6bffb..a180fde 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -467,12 +467,34 @@ build_ssdt(void)
+     return ssdt;
+ }
+ 
+-static void*
+-copy_table(void *table, int size)
++#include "ssdt-pcihp.hex"
++
++static void* build_pcihp(void)
+ {
+-    u8 *copy = malloc_high(size);
+-    memcpy(copy, table, size);
+-    return copy;
++    char *sys_states;
++    int sys_state_size;
++
++    u8 *ssdt = malloc_high(sizeof ssdp_pcihp_aml);
++    if (!ssdt) {
++        warn_noalloc();
++        return NULL;
++    }
++    memcpy(ssdt, ssdp_pcihp_aml, sizeof ssdp_pcihp_aml);
++
++    sys_states = romfile_loadfile("etc/system-states", &sys_state_size);
++    if (!sys_states || sys_state_size != 6)
++        sys_states = (char[]){128, 0, 0, 129, 128, 128};
++
++    if (!(sys_states[3] & 128))
++        ssdt[acpi_s3_name[0]] = 'X';
++    if (!(sys_states[4] & 128))
++        ssdt[acpi_s4_name[0]] = 'X';
++    else
++        ssdt[acpi_s4_pkg[0] + 1] = ssdt[acpi_s4_pkg[0] + 3] = sys_states[4] & 127;
++    ((struct acpi_table_header*)ssdt)->checksum = 0;
++    ((struct acpi_table_header*)ssdt)->checksum -= checksum(ssdt, sizeof(ssdp_pcihp_aml));
++
++    return ssdt;
+ }
+ 
+ #define HPET_SIGNATURE 0x54455048 //HPET
+@@ -616,8 +638,6 @@ static const struct pci_device_id acpi_find_tbl[] = {
+ 
+ struct rsdp_descriptor *RsdpAddr;
+ 
+-#include "ssdt-pcihp.hex"
+-
+ #define MAX_ACPI_TABLES 20
+ void
+ acpi_bios_init(void)
+@@ -654,7 +674,7 @@ acpi_bios_init(void)
+     ACPI_INIT_TABLE(build_ssdt());
+     ACPI_INIT_TABLE(build_madt());
+     ACPI_INIT_TABLE(build_srat());
+-    ACPI_INIT_TABLE(copy_table(ssdp_pcihp_aml, sizeof ssdp_pcihp_aml));
++    ACPI_INIT_TABLE(build_pcihp());
+ 
+     u16 i, external_tables = qemu_cfg_acpi_additional_tables();
+ 
+diff --git a/src/ssdt-pcihp.dsl b/src/ssdt-pcihp.dsl
+index acae47b..cb8bf13 100644
+--- a/src/ssdt-pcihp.dsl
++++ b/src/ssdt-pcihp.dsl
+@@ -2,4 +2,39 @@ ACPI_EXTRACT_ALL_CODE ssdp_pcihp_aml
+ 
+ DefinitionBlock ("ssdt-pcihp.aml", "SSDT", 0x01, "BXPC", "BXSSDTPCIHP", 0x1)
+ {
++    Scope(\) {
++/****************************************************************
++ * Suspend
++ ****************************************************************/
++
++    /*
++     * S3 (suspend-to-ram), S4 (suspend-to-disk) and S5 (power-off) type codes:
++     * must match piix4 emulation.
++     */
++
++        ACPI_EXTRACT_NAME_STRING acpi_s3_name
++        Name (_S3, Package (0x04)
++        {
++            One,  /* PM1a_CNT.SLP_TYP */
++            One,  /* PM1b_CNT.SLP_TYP */
++            Zero,  /* reserved */
++            Zero   /* reserved */
++        })
++        ACPI_EXTRACT_NAME_STRING acpi_s4_name
++        ACPI_EXTRACT_PKG_START acpi_s4_pkg
++        Name (_S4, Package (0x04)
++        {
++            0x2,  /* PM1a_CNT.SLP_TYP */
++            0x2,  /* PM1b_CNT.SLP_TYP */
++            Zero,  /* reserved */
++            Zero   /* reserved */
++        })
++        Name (_S5, Package (0x04)
++        {
++            Zero,  /* PM1a_CNT.SLP_TYP */
++            Zero,  /* PM1b_CNT.SLP_TYP */
++            Zero,  /* reserved */
++            Zero   /* reserved */
++        })
++    }
+ }
+-- 
+1.7.11.4
+

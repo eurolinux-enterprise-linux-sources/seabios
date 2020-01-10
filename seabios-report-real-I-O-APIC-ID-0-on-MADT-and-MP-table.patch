@@ -1,0 +1,90 @@
+From a32c42185b35f7e90f22e38776e3ffc3316bc749 Mon Sep 17 00:00:00 2001
+Message-Id: <a32c42185b35f7e90f22e38776e3ffc3316bc749.1346164569.git.minovotn@redhat.com>
+From: Eduardo Habkost <ehabkost@redhat.com>
+Date: Mon, 27 Aug 2012 18:59:00 +0200
+Subject: [PATCH 1/2] report real I/O APIC ID (0) on MADT and MP-table
+
+RH-Author: Eduardo Habkost <ehabkost@redhat.com>
+Message-id: <1346093941-17711-2-git-send-email-ehabkost@redhat.com>
+Patchwork-id: 41358
+O-Subject: [6.4 seabios PATCH 1/2] report real I/O APIC ID (0) on MADT and MP-table
+Bugzilla: 851245
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+Bugzilla: 851245
+Upstream status: applied
+(cherry picked from commit e39b9381687c9ddd3f1eb08f9135c574c099ee06)
+
+Original upstream commit message follows:
+
+When resetting an I/O APIC, its ID is set to 0, and SeaBIOS doesn't
+change it, so report it correctly on the ACPI MADT table and MP-table.
+
+Some hardware may require the BIOS to initialize I/O APIC ID to an
+unique value, but SeaBIOS doesn't do that. This patch at least makes the
+tables reflect reality.
+
+Changes v2 -> v3:
+ - Fix MP-table too, not just ACPI MADT table
+
+Changes v1 -> v2:
+ - Cosmetic: whitespace change (removed extra newline)
+ - New patch description
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ src/acpi.c    | 2 +-
+ src/config.h  | 1 +
+ src/mptable.c | 2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi.c    | 2 +-
+ src/config.h  | 1 +
+ src/mptable.c | 2 +-
+ 3 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/acpi.c b/src/acpi.c
+index 3af26c2..099f2a5 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -308,7 +308,7 @@ build_madt(void)
+     struct madt_io_apic *io_apic = (void*)apic;
+     io_apic->type = APIC_IO;
+     io_apic->length = sizeof(*io_apic);
+-    io_apic->io_apic_id = CountCPUs;
++    io_apic->io_apic_id = BUILD_IOAPIC_ID;
+     io_apic->address = cpu_to_le32(BUILD_IOAPIC_ADDR);
+     io_apic->interrupt = cpu_to_le32(0);
+ 
+diff --git a/src/config.h b/src/config.h
+index 79fdafb..634c9f4 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -184,6 +184,7 @@
+ 
+ #define BUILD_APIC_ADDR           0xfee00000
+ #define BUILD_IOAPIC_ADDR         0xfec00000
++#define BUILD_IOAPIC_ID           0
+ 
+ #define BUILD_SMM_INIT_ADDR       0x38000
+ #define BUILD_SMM_ADDR            0xa8000
+diff --git a/src/mptable.c b/src/mptable.c
+index cca3117..f899391 100644
+--- a/src/mptable.c
++++ b/src/mptable.c
+@@ -91,7 +91,7 @@ mptable_init(void)
+     entrycount += bus - buses;
+ 
+     /* ioapic */
+-    u8 ioapic_id = CountCPUs;
++    u8 ioapic_id = BUILD_IOAPIC_ID;
+     struct mpt_ioapic *ioapic = (void*)bus;
+     memset(ioapic, 0, sizeof(*ioapic));
+     ioapic->type = MPT_TYPE_IOAPIC;
+-- 
+1.7.11.2
+

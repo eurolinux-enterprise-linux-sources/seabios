@@ -1,0 +1,65 @@
+From 60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d Mon Sep 17 00:00:00 2001
+Message-Id: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+From: Gleb Natapov <gleb@redhat.com>
+Date: Mon, 3 Sep 2012 08:49:07 +0200
+Subject: [PATCH 1/7] Revert "do not advertise S4/S3 in DSDT"
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1346662153-18382-2-git-send-email-gleb@redhat.com>
+Patchwork-id: 41582
+O-Subject: [PATCH RHEL6.4 1/7] Revert "do not advertise S4/S3 in DSDT"
+Bugzilla: 827500
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+This reverts commit 526d703a74752b66fd54ac4a9133a3de31c90549.
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ Makefile          |    2 +-
+ src/acpi-dsdt.dsl |    2 --
+ 2 files changed, 1 insertion(+), 3 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ Makefile          | 2 +-
+ src/acpi-dsdt.dsl | 2 --
+ 2 files changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 39b4edd..d04500a 100644
+--- a/Makefile
++++ b/Makefile
+@@ -186,7 +186,7 @@ $(OUT)vgabios.bin: $(OUT)vgabios.bin.raw tools/buildrom.py
+ ####### dsdt build rules
+ src/%.hex: src/%.dsl
+ 	@echo "Compiling DSDT"
+-	$(Q)cpp $(DSDT_CPP_FLAGS) -P $< > $(OUT)$*.dsl.i
++	$(Q)cpp -P $< > $(OUT)$*.dsl.i
+ 	$(Q)iasl -tc -p $(OUT)$* $(OUT)$*.dsl.i
+ 	$(Q)cp $(OUT)$*.hex $@
+ 
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index 48bef43..ac39b7e 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -703,7 +703,6 @@ DefinitionBlock (
+         }
+     }
+ 
+-#ifdef DSDT_PM
+     /*
+      * S3 (suspend-to-ram), S4 (suspend-to-disk) and S5 (power-off) type codes:
+      * must match piix4 emulation.
+@@ -722,7 +721,6 @@ DefinitionBlock (
+         Zero,  /* reserved */
+         Zero   /* reserved */
+     })
+-#endif
+     Name (\_S5, Package (0x04)
+     {
+         Zero,  /* PM1a_CNT.SLP_TYP */
+-- 
+1.7.11.4
+

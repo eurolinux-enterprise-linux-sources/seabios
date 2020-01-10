@@ -1,0 +1,119 @@
+From b0898e404174cf54787c9cff4dea28098e8e2a70 Mon Sep 17 00:00:00 2001
+Message-Id: <b0898e404174cf54787c9cff4dea28098e8e2a70.1347373749.git.minovotn@redhat.com>
+In-Reply-To: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+References: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+From: Gleb Natapov <gleb@redhat.com>
+Date: Mon, 3 Sep 2012 08:49:12 +0200
+Subject: [PATCH 6/7] acpi: add ssdt for pci hotplug
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1346662153-18382-7-git-send-email-gleb@redhat.com>
+Patchwork-id: 41588
+O-Subject: [PATCH RHEL6.4 6/7] acpi: add ssdt for pci hotplug
+Bugzilla: 827500
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+Note on the backport: Only the part that creates file is backported, not
+PCI hotplug part. The file is needed for later patches. The original commit
+message follows, but it is irrelevant for this partial backport.
+
+The point of this split is to make runtime patching easier.
+
+DSDT is required to supply: PCI0 - PCI root device object;
+PCEJ - Method object to eject a PCI slot.
+Additionally, SSDT is required to supply PCNT - Method object to notify
+OSPM of a PCI slot event.
+
+Signed-off-by: Michael S. Tsirkin <mst@redhat.com>
+
+Upstream: c973788346e984a3d91f443008fdd613c30e3185
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ Makefile           |    2 +-
+ src/acpi.c         |   12 ++++++++++++
+ src/ssdt-pcihp.dsl |    5 +++++
+ 3 files changed, 18 insertions(+), 1 deletion(-)
+ create mode 100644 src/ssdt-pcihp.dsl
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ Makefile           |  2 +-
+ src/acpi.c         | 12 ++++++++++++
+ src/ssdt-pcihp.dsl |  5 +++++
+ 3 files changed, 18 insertions(+), 1 deletion(-)
+ create mode 100644 src/ssdt-pcihp.dsl
+
+diff --git a/Makefile b/Makefile
+index d9cecb0..818efe8 100644
+--- a/Makefile
++++ b/Makefile
+@@ -192,7 +192,7 @@ src/%.hex: src/%.dsl ./tools/acpi_extract_preprocess.py ./tools/acpi_extract.py
+ 	$(Q)./tools/acpi_extract.py $(OUT)$*.lst > $(OUT)$*.off
+ 	$(Q)cat $(OUT)$*.off > $@
+ 
+-$(OUT)ccode32flat.o: src/acpi-dsdt.hex
++$(OUT)ccode32flat.o: src/acpi-dsdt.hex src/ssdt-pcihp.hex
+ 
+ ####### Generic rules
+ clean:
+diff --git a/src/acpi.c b/src/acpi.c
+index 2f21743..de6bffb 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -388,6 +388,7 @@ static unsigned char ssdt_proc[] = {
+ #define SD_OFFSET_CPUID2 20
+ 
+ #define SSDT_SIGNATURE 0x54445353 // SSDT
++
+ static void*
+ build_ssdt(void)
+ {
+@@ -466,6 +467,14 @@ build_ssdt(void)
+     return ssdt;
+ }
+ 
++static void*
++copy_table(void *table, int size)
++{
++    u8 *copy = malloc_high(size);
++    memcpy(copy, table, size);
++    return copy;
++}
++
+ #define HPET_SIGNATURE 0x54455048 //HPET
+ static void*
+ build_hpet(void)
+@@ -607,6 +616,8 @@ static const struct pci_device_id acpi_find_tbl[] = {
+ 
+ struct rsdp_descriptor *RsdpAddr;
+ 
++#include "ssdt-pcihp.hex"
++
+ #define MAX_ACPI_TABLES 20
+ void
+ acpi_bios_init(void)
+@@ -643,6 +654,7 @@ acpi_bios_init(void)
+     ACPI_INIT_TABLE(build_ssdt());
+     ACPI_INIT_TABLE(build_madt());
+     ACPI_INIT_TABLE(build_srat());
++    ACPI_INIT_TABLE(copy_table(ssdp_pcihp_aml, sizeof ssdp_pcihp_aml));
+ 
+     u16 i, external_tables = qemu_cfg_acpi_additional_tables();
+ 
+diff --git a/src/ssdt-pcihp.dsl b/src/ssdt-pcihp.dsl
+new file mode 100644
+index 0000000..acae47b
+--- /dev/null
++++ b/src/ssdt-pcihp.dsl
+@@ -0,0 +1,5 @@
++ACPI_EXTRACT_ALL_CODE ssdp_pcihp_aml
++
++DefinitionBlock ("ssdt-pcihp.aml", "SSDT", 0x01, "BXPC", "BXSSDTPCIHP", 0x1)
++{
++}
+-- 
+1.7.11.4
+

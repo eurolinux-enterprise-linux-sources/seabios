@@ -1,0 +1,215 @@
+From 35282891445a1ce7ffc9fb9f5a250d899c5abc80 Mon Sep 17 00:00:00 2001
+Message-Id: <35282891445a1ce7ffc9fb9f5a250d899c5abc80.1346164569.git.minovotn@redhat.com>
+In-Reply-To: <a32c42185b35f7e90f22e38776e3ffc3316bc749.1346164569.git.minovotn@redhat.com>
+References: <a32c42185b35f7e90f22e38776e3ffc3316bc749.1346164569.git.minovotn@redhat.com>
+From: Eduardo Habkost <ehabkost@redhat.com>
+Date: Mon, 27 Aug 2012 18:59:01 +0200
+Subject: [PATCH 2/2] allow CPUs to have non-contiguous Local APIC IDs
+
+RH-Author: Eduardo Habkost <ehabkost@redhat.com>
+Message-id: <1346093941-17711-3-git-send-email-ehabkost@redhat.com>
+Patchwork-id: 41356
+O-Subject: [6.4 seabios PATCH 2/2] allow CPUs to have non-contiguous Local APIC IDs
+Bugzilla: 851245
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+Bugzilla: 851245
+Upstream status: applied
+(cherry picked from commit 008c1fc5bd4f1c545c38e07242ad676830ea7785)
+
+Original upstream commit message follows:
+
+Extract Local APIC IDs directly from the CPUs, and instead of check for
+"i < CountCPUs", check if the APIC ID was present on boot, when building
+ACPI tables and the MP-Table.
+
+This keeps ACPI Processor ID == APIC ID, but allows the
+hardware<->SeaBIOS interface be completely APIC-ID based and not depend
+on any other kind of "CPU identifier". This way, SeaBIOS may change the
+way ACPI Processor IDs are chosen in the future.
+
+As currently SeaBIOS supports only xAPIC and not x2APIC, the list of
+present-on-boot APIC IDs is a 256-bit bitmap. If one day SeaBIOS starts
+to support x2APIC, the data structure used to enumerate the APIC IDs
+will have to be changed (but this is an internal implementation detail,
+not visible to the OS or on any hardware<=>SeaBIOS interface).
+
+For current QEMU versions (that always make the APIC IDs contiguous),
+the OS-visible behavior and resulting ACPI tables should be exactly the
+same. This patch will simply allow QEMU to start setting non-contiguous
+APIC IDs (that is a requirement for some sockets/cores/threads topology
+settings).
+
+Changes v1 -> v2:
+ - Use size suffixes on all asm instructions on smp.c
+ - New patch description
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ src/acpi-dsdt.dsl |  4 +++-
+ src/acpi.c        |  9 +++++----
+ src/mptable.c     |  2 +-
+ src/smp.c         | 17 +++++++++++++++++
+ src/util.h        |  1 +
+ 5 files changed, 27 insertions(+), 6 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi-dsdt.dsl |  4 +++-
+ src/acpi.c        |  9 +++++----
+ src/mptable.c     |  2 +-
+ src/smp.c         | 17 +++++++++++++++++
+ src/util.h        |  1 +
+ 5 files changed, 27 insertions(+), 6 deletions(-)
+
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index 1af39b1..48bef43 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -740,6 +740,7 @@ DefinitionBlock (
+         /* Methods called by run-time generated SSDT Processor objects */
+         Method (CPMA, 1, NotSerialized) {
+             // _MAT method - create an madt apic buffer
++            // Arg0 = Processor ID = Local APIC ID
+             // Local0 = CPON flag for this cpu
+             Store(DerefOf(Index(CPON, Arg0)), Local0)
+             // Local1 = Buffer (in madt apic form) to return
+@@ -752,6 +753,7 @@ DefinitionBlock (
+         }
+         Method (CPST, 1, NotSerialized) {
+             // _STA method - return ON status of cpu
++            // Arg0 = Processor ID = Local APIC ID
+             // Local0 = CPON flag for this cpu
+             Store(DerefOf(Index(CPON, Arg0)), Local0)
+             If (Local0) { Return(0xF) } Else { Return(0x0) }
+@@ -772,7 +774,7 @@ DefinitionBlock (
+             Store (PRS, Local5)
+             // Local2 = last read byte from bitmap
+             Store (Zero, Local2)
+-            // Local0 = cpuid iterator
++            // Local0 = Processor ID / APIC ID iterator
+             Store (Zero, Local0)
+             While (LLess(Local0, SizeOf(CPON))) {
+                 // Local1 = CPON flag for this cpu
+diff --git a/src/acpi.c b/src/acpi.c
+index 099f2a5..2f21743 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -299,7 +299,7 @@ build_madt(void)
+         apic->length = sizeof(*apic);
+         apic->processor_id = i;
+         apic->local_apic_id = i;
+-        if (i < CountCPUs)
++        if (apic_id_is_present(apic->local_apic_id))
+             apic->flags = cpu_to_le32(1);
+         else
+             apic->flags = cpu_to_le32(0);
+@@ -424,6 +424,7 @@ build_ssdt(void)
+     }
+ 
+     // build "Method(NTFY, 2) {If (LEqual(Arg0, 0x00)) {Notify(CP00, Arg1)} ...}"
++    // Arg0 = Processor ID = APIC ID
+     *(ssdt_ptr++) = 0x14; // MethodOp
+     ssdt_ptr = encodeLen(ssdt_ptr, 2+5+(12*acpi_cpus), 2);
+     *(ssdt_ptr++) = 'N';
+@@ -456,7 +457,7 @@ build_ssdt(void)
+     ssdt_ptr = encodeLen(ssdt_ptr, 2+1+(1*acpi_cpus), 2);
+     *(ssdt_ptr++) = acpi_cpus;
+     for (i=0; i<acpi_cpus; i++)
+-        *(ssdt_ptr++) = (i < CountCPUs) ? 0x01 : 0x00;
++        *(ssdt_ptr++) = (apic_id_is_present(i)) ? 0x01 : 0x00;
+ 
+     build_header((void*)ssdt, SSDT_SIGNATURE, ssdt_ptr - ssdt, 1);
+ 
+@@ -544,10 +545,10 @@ build_srat(void)
+         core->proximity_lo = curnode;
+         memset(core->proximity_hi, 0, 3);
+         core->local_sapic_eid = 0;
+-        if (i < CountCPUs)
++        if (apic_id_is_present(i))
+             core->flags = cpu_to_le32(1);
+         else
+-            core->flags = 0;
++            core->flags = cpu_to_le32(0);
+         core++;
+     }
+ 
+diff --git a/src/mptable.c b/src/mptable.c
+index f899391..b6c2154 100644
+--- a/src/mptable.c
++++ b/src/mptable.c
+@@ -59,7 +59,7 @@ mptable_init(void)
+         cpu->apicid = i;
+         cpu->apicver = apic_version;
+         /* cpu flags: enabled, bootstrap cpu */
+-        cpu->cpuflag = ((i<CountCPUs) ? 0x01 : 0x00) | ((i==0) ? 0x02 : 0x00);
++        cpu->cpuflag = (apic_id_is_present(i) ? 0x01 : 0x00) | ((i==0) ? 0x02 : 0x00);
+         cpu->cpusignature = cpuid_signature;
+         cpu->featureflag = cpuid_features;
+         cpu++;
+diff --git a/src/smp.c b/src/smp.c
+index fe81cdc..8522073 100644
+--- a/src/smp.c
++++ b/src/smp.c
+@@ -34,6 +34,8 @@ wrmsr_smp(u32 index, u64 val)
+ 
+ u32 CountCPUs VAR16VISIBLE;
+ u32 MaxCountCPUs VAR16VISIBLE;
++// 256 bits for the found APIC IDs
++u32 FoundAPICIDs[256/32] VAR16VISIBLE;
+ extern void smp_ap_boot_code(void);
+ ASM16(
+     "  .global smp_ap_boot_code\n"
+@@ -57,6 +59,12 @@ ASM16(
+     "  jmp 1b\n"
+     "2:\n"
+ 
++    // get apic ID on EBX, set bit on FoundAPICIDs
++    "  movl $1, %eax\n"
++    "  cpuid\n"
++    "  shrl $24, %ebx\n"
++    "  lock btsl %ebx, FoundAPICIDs\n"
++
+     // Increment the cpu counter
+     "  lock incl CountCPUs\n"
+ 
+@@ -65,6 +73,11 @@ ASM16(
+     "  jmp 1b\n"
+     );
+ 
++int apic_id_is_present(u8 apic_id)
++{
++    return FoundAPICIDs[apic_id/32] & (1 << (apic_id % 32));
++}
++
+ // find and initialize the CPUs by launching a SIPI to them
+ void
+ smp_probe(void)
+@@ -80,6 +93,10 @@ smp_probe(void)
+         return;
+     }
+ 
++    // mark the BSP initial APIC ID as found, too:
++    u8 apic_id = ebx>>24;
++    FoundAPICIDs[apic_id/32] |= (1 << (apic_id % 32));
++
+     // Init the counter.
+     writel(&CountCPUs, 1);
+ 
+diff --git a/src/util.h b/src/util.h
+index 4a04256..86ab6d1 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -361,6 +361,7 @@ extern u32 MaxCountCPUs;
+ void wrmsr_smp(u32 index, u64 val);
+ void smp_probe(void);
+ void smp_probe_setup(void);
++int apic_id_is_present(u8 apic_id);
+ 
+ // coreboot.c
+ struct cbfs_file;
+-- 
+1.7.11.2
+

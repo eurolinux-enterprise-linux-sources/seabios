@@ -1,0 +1,66 @@
+From 013aaeb0360295e450e1d35a3055ce1f80d817f0 Mon Sep 17 00:00:00 2001
+Message-Id: <013aaeb0360295e450e1d35a3055ce1f80d817f0.1355144077.git.minovotn@redhat.com>
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 27 Nov 2012 16:58:34 +0100
+Subject: [PATCH] pci: use u64 for pci address space math
+
+RH-Author: Gerd Hoffmann <kraxel@redhat.com>
+Message-id: <1354035514-29184-1-git-send-email-kraxel@redhat.com>
+Patchwork-id: 44448
+O-Subject: [RHEL-6 seabios PATCH] pci: use u64 for pci address space math
+Bugzilla: 771616
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+RH-Acked-by: Don Dutile <ddutile@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+Otherwise seabios can fail to detect that a pci bar doesn't fit into the
+address space due to addr + size overflowing to zero.  Following that
+mistake seabios will try to map the next mmio bar it discovers at
+address zero.  At that point everything goes south, probably because
+the real mode interrupt table was just killed.
+
+bugzilla: 771616 - Too big value of QXL-VGA ram_size and vram_size cause
+                   VM paused (internal-error)
+upstream: Pointless, pci code has been rewritten twice since we forked.
+          And, yes, seabios does 64bit math these days, to support
+          64bit pci bars properly, so this issue is gone upstream too.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ src/pciinit.c |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/pciinit.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/pciinit.c b/src/pciinit.c
+index 0346423..f517243 100644
+--- a/src/pciinit.c
++++ b/src/pciinit.c
+@@ -17,9 +17,9 @@
+ 
+ static void pci_bios_init_device_in_bus(int bus);
+ 
+-static u32 pci_bios_io_addr;
+-static u32 pci_bios_mem_addr;
+-static u32 pci_bios_prefmem_addr;
++static u64 pci_bios_io_addr;
++static u64 pci_bios_mem_addr;
++static u64 pci_bios_prefmem_addr;
+ /* host irqs corresponding to PCI irqs A-D */
+ const u8 pci_irqs[4] = {
+     10, 10, 11, 11
+@@ -54,7 +54,7 @@ static void pci_set_io_region_addr(u16 bdf, int region_num, u32 addr)
+  */
+ static int pci_bios_allocate_region(u16 bdf, int region_num)
+ {
+-    u32 *paddr;
++    u64 *paddr;
+     u32 ofs = pci_bar(bdf, region_num);
+ 
+     u32 old = pci_config_readl(bdf, ofs);
+-- 
+1.7.11.7
+

@@ -1,0 +1,188 @@
+From 41bf8c642f768ba927cca8491003b4b4e45d6859 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 11 Sep 2012 07:40:56 -0300
+Subject: [PATCH] add acpi pmtimer support
+
+RH-Author: Gerd Hoffmann <kraxel@redhat.com>
+Message-id: <1347349256-17549-1-git-send-email-kraxel@redhat.com>
+Patchwork-id: 41804
+O-Subject: [RHEL-6 seabios PATCH] add acpi pmtimer support
+Bugzilla: 854448
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+
+This patch makes seabios use the acpi pmtimer instead of tsc for
+timekeeping.  The pmtimer has a fixed frequency and doesn't need
+calibration, thus it doesn't suffer from calibration errors due to a
+loaded host machine.
+
+[ v4: mask port ioport read ]
+[ v2: add CONFIG_PMTIMER ]
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+(cherry picked from commit 455a7c87e8227d83b7bd8982285fed95546cb8c9)
+
+Conflicts:
+
+	src/Kconfig
+	src/clock.c
+	src/pciinit.c
+	src/util.h
+
+[ rhel6: LOWVAR not available, use EBDA instead ]
+[ rhel6: tsc emulation for old cpus not present, must replace some
+         direct tsc reads calls with get_tsc() because of that ]
+---
+ src/biosvar.h    |    4 ++++
+ src/clock.c      |   48 ++++++++++++++++++++++++++++++++++++++++++++----
+ src/dev-i440fx.c |    5 +++++
+ src/util.h       |    5 ++---
+ 4 files changed, 55 insertions(+), 7 deletions(-)
+
+Signed-off-by: Eduardo Habkost <ehabkost@raisama.net>
+---
+ src/biosvar.h    |  4 ++++
+ src/clock.c      | 48 ++++++++++++++++++++++++++++++++++++++++++++----
+ src/dev-i440fx.c |  5 +++++
+ src/util.h       |  5 ++---
+ 4 files changed, 55 insertions(+), 7 deletions(-)
+
+diff --git a/src/biosvar.h b/src/biosvar.h
+index 2b755e3..2d738cd 100644
+--- a/src/biosvar.h
++++ b/src/biosvar.h
+@@ -238,6 +238,10 @@ struct extended_bios_data_area_s {
+ 
+     u16 boot_sequence;
+ 
++    // pmtimer
++    u32 pmtimer_wraps;
++    u32 pmtimer_last;
++
+     // Stack space available for code that needs it.
+     u8 extra_stack[512] __aligned(8);
+ } PACKED;
+diff --git a/src/clock.c b/src/clock.c
+index f6a43e9..618bec1 100644
+--- a/src/clock.c
++++ b/src/clock.c
+@@ -89,10 +89,50 @@ calibrate_tsc(void)
+     dprintf(1, "CPU Mhz=%u\n", hz / 1000000);
+ }
+ 
++u16 pmtimer_ioport VAR16VISIBLE;
++
++void pmtimer_init(u16 ioport, u32 khz)
++{
++    dprintf(1, "Using pmtimer, ioport 0x%x, freq %d kHz\n", ioport, khz);
++    SET_GLOBAL(pmtimer_ioport, ioport);
++    SET_GLOBAL(cpu_khz, khz);
++}
++
++static u64 pmtimer_get(void)
++{
++    u16 ioport = GET_GLOBAL(pmtimer_ioport);
++    u16 ebda_seg = get_ebda_seg();
++    u32 wraps = GET_EBDA2(ebda_seg, pmtimer_wraps);
++    u32 pmtimer = inl(ioport) & 0xffffff;
++
++    if (pmtimer < GET_EBDA2(ebda_seg, pmtimer_last)) {
++        wraps++;
++        SET_EBDA2(ebda_seg, pmtimer_wraps, wraps);
++    }
++    SET_EBDA2(ebda_seg, pmtimer_last, pmtimer);
++
++    dprintf(9, "pmtimer: %u:%u\n", wraps, pmtimer);
++    return (u64)wraps << 24 | pmtimer;
++}
++
++static u64
++get_tsc(void)
++{
++    if (GET_GLOBAL(pmtimer_ioport))
++        return pmtimer_get();
++    return rdtscll();
++}
++
++int
++check_tsc(u64 end)
++{
++    return (s64)(get_tsc() - end) > 0;
++}
++
+ static void
+ tscdelay(u64 diff)
+ {
+-    u64 start = rdtscll();
++    u64 start = get_tsc();
+     u64 end = start + diff;
+     while (!check_tsc(end))
+         cpu_relax();
+@@ -101,7 +141,7 @@ tscdelay(u64 diff)
+ static void
+ tscsleep(u64 diff)
+ {
+-    u64 start = rdtscll();
++    u64 start = get_tsc();
+     u64 end = start + diff;
+     while (!check_tsc(end))
+         yield();
+@@ -132,13 +172,13 @@ u64
+ calc_future_tsc(u32 msecs)
+ {
+     u32 khz = GET_GLOBAL(cpu_khz);
+-    return rdtscll() + ((u64)khz * msecs);
++    return get_tsc() + ((u64)khz * msecs);
+ }
+ u64
+ calc_future_tsc_usec(u32 usecs)
+ {
+     u32 khz = GET_GLOBAL(cpu_khz);
+-    return rdtscll() + ((u64)(khz/1000) * usecs);
++    return get_tsc() + ((u64)(khz/1000) * usecs);
+ }
+ 
+ 
+diff --git a/src/dev-i440fx.c b/src/dev-i440fx.c
+index 346f6d0..120a4c2 100644
+--- a/src/dev-i440fx.c
++++ b/src/dev-i440fx.c
+@@ -58,6 +58,9 @@ void piix_ide_init(u16 bdf, void *arg)
+     pci_bios_allocate_regions(bdf, NULL);
+ }
+ 
++/* PM Timer ticks per second (HZ) */
++#define PM_TIMER_FREQUENCY  3579545
++
+ /* PIIX4 Power Management device (for ACPI) */
+ void piix4_pm_init(u16 bdf, void *arg)
+ {
+@@ -68,6 +71,8 @@ void piix4_pm_init(u16 bdf, void *arg)
+     pci_config_writeb(bdf, 0x80, 0x01); /* enable PM io space */
+     pci_config_writel(bdf, 0x90, PORT_SMB_BASE | 1);
+     pci_config_writeb(bdf, 0xd2, 0x09); /* enable SMBus io space */
++
++    pmtimer_init(PORT_ACPI_PM_BASE + 0x08, PM_TIMER_FREQUENCY / 1000);
+ }
+ 
+ #define PIIX4_ACPI_ENABLE       0xf1
+diff --git a/src/util.h b/src/util.h
+index 86ab6d1..0cd8036 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -310,9 +310,8 @@ void lpt_setup(void);
+ // clock.c
+ #define PIT_TICK_RATE 1193180   // Underlying HZ of PIT
+ #define PIT_TICK_INTERVAL 65536 // Default interval for 18.2Hz timer
+-static inline int check_tsc(u64 end) {
+-    return (s64)(rdtscll() - end) > 0;
+-}
++void pmtimer_init(u16 ioport, u32 khz);
++int check_tsc(u64 end);
+ void timer_setup(void);
+ void ndelay(u32 count);
+ void udelay(u32 count);
+-- 
+1.7.11.4
+

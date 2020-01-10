@@ -1,0 +1,77 @@
+From d9899f7b8fecb886433a42887d412af08dc595d3 Mon Sep 17 00:00:00 2001
+Message-Id: <d9899f7b8fecb886433a42887d412af08dc595d3.1346946046.git.minovotn@redhat.com>
+From: Amos Kong <akong@redhat.com>
+Date: Thu, 6 Sep 2012 04:42:16 +0200
+Subject: [PATCH 1/2] Add "romfile" code to assist with extract integer config
+ settings.
+
+RH-Author: Amos Kong <akong@redhat.com>
+Message-id: <1346906537-25081-2-git-send-email-akong@redhat.com>
+Patchwork-id: 41686
+O-Subject: [RHEL-6.4 seabios PATCH 1/2] Add "romfile" code to assist with extract integer config settings.
+Bugzilla: 831273
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Add romfile_loadint() function which can be used to extract a
+little-endian binary encoded integer from rom.
+
+(Cherry-picked from commit 8b565781f1e4043613ede1bcd3b7c4216d62a5d6)
+
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+---
+ src/paravirt.c |   19 +++++++++++++++++++
+ src/paravirt.h |    1 +
+ 2 files changed, 20 insertions(+), 0 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/paravirt.c | 19 +++++++++++++++++++
+ src/paravirt.h |  1 +
+ 2 files changed, 20 insertions(+)
+
+diff --git a/src/paravirt.c b/src/paravirt.c
+index 09e3d23..9cf77de 100644
+--- a/src/paravirt.c
++++ b/src/paravirt.c
+@@ -409,3 +409,22 @@ romfile_loadfile(const char *name, int *psize)
+     data[filesize] = '\0';
+     return data;
+ }
++
++// Attempt to load an integer from the given file - return 'defval'
++// if unsuccesful.
++u64
++romfile_loadint(const char *name, u64 defval)
++{
++    u32 file = romfile_find(name);
++    if (!file)
++        return defval;
++
++    int filesize = romfile_size(file);
++    if (!filesize || filesize > sizeof(u64) || (filesize & (filesize-1)))
++        // Doesn't look like a valid integer.
++        return defval;
++
++    u64 val = 0;
++    romfile_copy(file, &val, sizeof(val));
++    return val;
++}
+diff --git a/src/paravirt.h b/src/paravirt.h
+index 7bf34b1..83166f4 100644
+--- a/src/paravirt.h
++++ b/src/paravirt.h
+@@ -101,6 +101,7 @@ static inline const char* romfile_name(u32 fileid) {
+     return qemu_cfg_name_file(fileid);
+ }
+ void *romfile_loadfile(const char *name, int *psize);
++u64 romfile_loadint(const char *name, u64 defval);
+ 
+ u32 qemu_cfg_e820_entries(void);
+ void* qemu_cfg_e820_load_next(void *addr);
+-- 
+1.7.11.4
+

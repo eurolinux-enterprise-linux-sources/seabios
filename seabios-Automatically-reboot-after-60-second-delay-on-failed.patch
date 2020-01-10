@@ -1,0 +1,88 @@
+From f104f55d65731dff0f556bc84f2f91196202f6e1 Mon Sep 17 00:00:00 2001
+Message-Id: <f104f55d65731dff0f556bc84f2f91196202f6e1.1346946046.git.minovotn@redhat.com>
+In-Reply-To: <d9899f7b8fecb886433a42887d412af08dc595d3.1346946046.git.minovotn@redhat.com>
+References: <d9899f7b8fecb886433a42887d412af08dc595d3.1346946046.git.minovotn@redhat.com>
+From: Amos Kong <akong@redhat.com>
+Date: Thu, 6 Sep 2012 04:42:17 +0200
+Subject: [PATCH 2/2] Automatically reboot after 60 second delay on failed
+ boot.
+
+RH-Author: Amos Kong <akong@redhat.com>
+Message-id: <1346906537-25081-3-git-send-email-akong@redhat.com>
+Patchwork-id: 41687
+O-Subject: [RHEL-6.4 seabios PATCH 2/2] Automatically reboot after 60 second delay on failed boot.
+Bugzilla: 831273
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+If no valid boot devices are found, display the error for 60 seconds
+(by default) and then reboot.  This enables a periodic retry in case
+one of the boot devices is still coming online.
+
+(Cherry-picked from commit b8fcf46826e77c835da0ad8127a17895bb2e2fca)
+
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+---
+ src/boot.c |   31 +++++++++++++++++++++++++------
+ 1 files changed, 25 insertions(+), 6 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/boot.c | 31 +++++++++++++++++++++++++------
+ 1 file changed, 25 insertions(+), 6 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 9649b8c..93ae83b 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -601,6 +601,29 @@ boot_rom(u32 vector)
+     call_boot_entry(so, 0);
+ }
+ 
++// Unable to find bootable device - warn user and eventually retry.
++static void
++boot_fail(void)
++{
++    u32 retrytime = romfile_loadint("etc/boot-fail-wait", 60*1000);
++    if (retrytime == (u32)-1)
++        printf("No bootable device.\n");
++    else
++        printf("No bootable device.  Retrying in %d seconds.\n", retrytime/1000);
++    // Wait for 'retrytime' milliseconds and then reboot.
++    u32 end = calc_future_timer(retrytime);
++    for (;;) {
++        if (retrytime != (u32)-1 && check_timer(end))
++            break;
++        wait_irq();
++    }
++    printf("Rebooting.\n");
++    struct bregs br;
++    memset(&br, 0, sizeof(br));
++    br.code = SEGOFF(SEG_BIOS, (u32)reset_vector);
++    call16big(&br);
++}
++
+ // Determine next boot method and attempt a boot using it.
+ static void
+ do_boot(u16 seq_nr)
+@@ -608,12 +631,8 @@ do_boot(u16 seq_nr)
+     if (! CONFIG_BOOT)
+         panic("Boot support not compiled in.\n");
+ 
+-    if (seq_nr >= BEVCount) {
+-        printf("No bootable device.\n");
+-        // Loop with irqs enabled - this allows ctrl+alt+delete to work.
+-        for (;;)
+-            wait_irq();
+-    }
++    if (seq_nr >= BEVCount)
++        boot_fail();
+ 
+     // Boot the given BEV type.
+     struct bev_s *ie = &BEV[seq_nr];
+-- 
+1.7.11.4
+

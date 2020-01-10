@@ -1,0 +1,49 @@
+From 823b888e7eab04aee1dce03866b14b984fda8439 Mon Sep 17 00:00:00 2001
+Message-Id: <823b888e7eab04aee1dce03866b14b984fda8439.1347373749.git.minovotn@redhat.com>
+In-Reply-To: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+References: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+From: Gleb Natapov <gleb@redhat.com>
+Date: Mon, 3 Sep 2012 08:49:10 +0200
+Subject: [PATCH 4/7] Fix aml_name_string() to recognize block name modifiers.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1346662153-18382-5-git-send-email-gleb@redhat.com>
+Patchwork-id: 41584
+O-Subject: [PATCH RHEL6.4 4/7] Fix aml_name_string() to recognize block name modifiers.
+Bugzilla: 827500
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+(cherry picked from commit 2197ff6667275f271baa8aa06cb85ce7d0805a1a)
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ tools/acpi_extract.py |    6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ tools/acpi_extract.py | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/tools/acpi_extract.py b/tools/acpi_extract.py
+index 5f613e4..8038269 100755
+--- a/tools/acpi_extract.py
++++ b/tools/acpi_extract.py
+@@ -121,7 +121,11 @@ def aml_name_string(offset):
+     if (aml[offset] != 0x08):
+         die( "Name offset 0x%x: expected 0x08 actual 0x%x" %
+              (offset, aml[offset]));
+-    return offset + 1;
++    offset += 1
++    # Block Name Modifier. Skip it.
++    if (aml[offset] == 0x5c or aml[offset] == 0x5e):
++        offset += 1
++    return offset;
+ 
+ # Given data offset, find dword const offset
+ def aml_data_dword_const(offset):
+-- 
+1.7.11.4
+

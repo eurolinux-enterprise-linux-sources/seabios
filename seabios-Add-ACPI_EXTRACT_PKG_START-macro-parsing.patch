@@ -1,0 +1,75 @@
+From c19700e36ece217b3f4c75899c14d729b168d980 Mon Sep 17 00:00:00 2001
+Message-Id: <c19700e36ece217b3f4c75899c14d729b168d980.1347373749.git.minovotn@redhat.com>
+In-Reply-To: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+References: <60f5a5c59dffe1a436d9e5ed4f1f1d3c8267eb9d.1347373749.git.minovotn@redhat.com>
+From: Gleb Natapov <gleb@redhat.com>
+Date: Mon, 3 Sep 2012 08:49:11 +0200
+Subject: [PATCH 5/7] Add ACPI_EXTRACT_PKG_START macro parsing
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1346662153-18382-6-git-send-email-gleb@redhat.com>
+Patchwork-id: 41585
+O-Subject: [PATCH RHEL6.4 5/7] Add ACPI_EXTRACT_PKG_START macro parsing
+Bugzilla: 827500
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+It allows to extract the beginning of a Package object content.
+
+Upstream: 94bb3ca56aa810c784112900d08fd85500e63bc3
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ tools/acpi_extract.py |   14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ tools/acpi_extract.py | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/tools/acpi_extract.py b/tools/acpi_extract.py
+index 8038269..cd9d1d8 100755
+--- a/tools/acpi_extract.py
++++ b/tools/acpi_extract.py
+@@ -29,9 +29,10 @@
+ # ACPI_EXTRACT_PROCESSOR_START - start of Processor() block
+ # ACPI_EXTRACT_PROCESSOR_STRING - extract a NameString from Processor()
+ # ACPI_EXTRACT_PROCESSOR_END - offset at last byte of Processor() + 1
++# ACPI_EXTRACT_PKG_START - start of Package block
+ #
+ # ACPI_EXTRACT_ALL_CODE - create an array storing the generated AML bytecode
+-# 
++#
+ # ACPI_EXTRACT is not allowed anywhere else in code, except in comments.
+ 
+ import re;
+@@ -185,6 +186,15 @@ def aml_processor_end(offset):
+     pkglen = aml_pkglen(offset)
+     return offset + pkglen
+ 
++def aml_package_start(offset):
++    offset = aml_name_string(offset) + 4
++    # 0x12 PkgLength NumElements PackageElementList
++    if (aml[offset] != 0x12):
++        die( "Name offset 0x%x: expected 0x12 actual 0x%x" %
++             (offset, aml[offset]));
++    offset += 1
++    return offset + aml_pkglen_bytes(offset) + 1
++
+ lineno = 0
+ for line in fileinput.input():
+     # Strip trailing newline
+@@ -267,6 +277,8 @@ for i in range(len(asl)):
+         offset = aml_processor_string(offset)
+     elif (directive == "ACPI_EXTRACT_PROCESSOR_END"):
+         offset = aml_processor_end(offset)
++    elif (directive == "ACPI_EXTRACT_PKG_START"):
++        offset = aml_package_start(offset)
+     else:
+         die("Unsupported directive %s" % directive)
+ 
+-- 
+1.7.11.4
+

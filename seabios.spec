@@ -3,7 +3,7 @@
 
 Name:           seabios
 Version:        0.6.1.2
-%define pkgrelease 19
+%define pkgrelease 26
 Release:        %{pkgrelease}%{?dist}
 Summary:        Open-source legacy BIOS implementation
 
@@ -172,6 +172,32 @@ Patch77: seabios-Replace-level-gpe-event-with-edge-gpe-event-for-hot-.patch
 Patch78: seabios-Revert-enable-S3-S4.patch
 # For bz#810471 - boot fails while starting guest with sockets>62 and cores=1 and threads=1 option  and 10 virtio disks
 Patch79: seabios-increase-f-segment-memory-pool.patch
+# For bz#851245 - SeaBIOS: support non-contiguous APIC IDs
+Patch80: seabios-report-real-I-O-APIC-ID-0-on-MADT-and-MP-table.patch
+# For bz#851245 - SeaBIOS: support non-contiguous APIC IDs
+Patch81: seabios-allow-CPUs-to-have-non-contiguous-Local-APIC-IDs.patch
+# For bz#831273 - RFE: reboot VM if no bootable device found
+Patch82: seabios-Add-romfile-code-to-assist-with-extract-integer-conf.patch
+# For bz#831273 - RFE: reboot VM if no bootable device found
+Patch83: seabios-Automatically-reboot-after-60-second-delay-on-failed.patch
+# For bz#827500 - Config s3/s4 per VM - in seabios
+Patch84: seabios-Revert-do-not-advertise-S4-S3-in-DSDT.patch
+# For bz#827500 - Config s3/s4 per VM - in seabios
+Patch85: seabios-acpi-generate-and-parse-mixed-asl-aml-listing.patch
+# For bz#827500 - Config s3/s4 per VM - in seabios
+Patch86: seabios-acpi-extract-aml-from-.lst.patch
+# For bz#827500 - Config s3/s4 per VM - in seabios
+Patch87: seabios-Fix-aml_name_string-to-recognize-block-name-modifier.patch
+# For bz#827500 - Config s3/s4 per VM - in seabios
+Patch88: seabios-Add-ACPI_EXTRACT_PKG_START-macro-parsing.patch
+# For bz#827500 - Config s3/s4 per VM - in seabios
+Patch89: seabios-acpi-add-ssdt-for-pci-hotplug.patch
+# For bz#827500 - Config s3/s4 per VM - in seabios
+Patch90: seabios-Get-system-state-configuration-from-QEMU-and-patch-D.patch
+# For bz#854448 - add pmtimer support
+Patch91: seabios-add-acpi-pmtimer-support.patch
+# For bz#771616 - Too big value of QXL-VGA ram_size and vram_size cause VM paused (internal-error)
+Patch92: seabios-pci-use-u64-for-pci-address-space-math.patch
 
 %description
 SeaBIOS is an open-source legacy BIOS implementation which can be used as
@@ -260,22 +286,29 @@ that a typical x86 proprietary BIOS implements.
 %patch77 -p1
 %patch78 -p1
 %patch79 -p1
+%patch80 -p1
+%patch81 -p1
+%patch82 -p1
+%patch83 -p1
+%patch84 -p1
+%patch85 -p1
+%patch86 -p1
+%patch87 -p1
+%patch88 -p1
+%patch89 -p1
+%patch90 -p1
+%patch91 -p1
+%patch92 -p1
 
 %build
-mkdir saved-output
-make VERSION="%{name}-%{version}-%{release}-PM" DSDT_CPP_FLAGS=-DDSDT_PM
-cp out/bios.bin saved-output/bios-pm.bin
-make clean
-rm -f src/acpi-dsdt.hex
-make VERSION="%{name}-%{version}-%{release}"
-cp out/bios.bin saved-output/bios-no_pm.bin
+chmod 755 tools/*.py
+make VERSION="%{name}-%{version}-%{release}" DSDT_CPP_FLAGS=-DDSDT_PM
 
 
 %install
 rm -rf $RPM_BUILD_ROOT
 mkdir -p $RPM_BUILD_ROOT%{_datadir}/seabios
-install -m 0644 saved-output/bios-pm.bin $RPM_BUILD_ROOT%{_datadir}/seabios/bios-pm.bin
-install -m 0644 saved-output/bios-no_pm.bin $RPM_BUILD_ROOT%{_datadir}/seabios/bios.bin
+install -m 0644 out/bios.bin $RPM_BUILD_ROOT%{_datadir}/seabios
 
 
 %clean
@@ -287,11 +320,53 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_datadir}/seabios/
 %doc COPYING COPYING.LESSER README TODO
 %{_datadir}/seabios/bios.bin
-%{_datadir}/seabios/bios-pm.bin
 
 
 
 %changelog
+* Mon Dec 10 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-25.el6
+- seabios-pci-use-u64-for-pci-address-space-math.patch [bz#771616]
+- Resolves: bz#771616
+  (Too big value of QXL-VGA ram_size and vram_size cause VM paused (internal-error))
+
+* Mon Oct 15 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-25.el6
+- Fix data in the spec file
+- Related: bz#839674
+  (Revert back to a single seabios binary once s3/s4 configuration is in)
+
+* Mon Oct 15 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-24.el6
+- revert-seabios-to-single-binary [bz#839674]
+- Resolves: bz#839674
+  (Revert back to a single seabios binary once s3/s4 configuration is in)
+
+* Thu Sep 27 2012 Eduardo Habkost <ehabkost@redhat.com> - seabios-0.6.1.2-23.el6
+- seabios-add-acpi-pmtimer-support.patch [bz#854448]
+- Resolves: bz#854448
+  (add pmtimer support)
+
+* Tue Sep 11 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-21.el6
+- seabios-Revert-do-not-advertise-S4-S3-in-DSDT.patch [bz#827500]
+- seabios-acpi-generate-and-parse-mixed-asl-aml-listing.patch [bz#827500]
+- seabios-acpi-extract-aml-from-.lst.patch [bz#827500]
+- seabios-Fix-aml_name_string-to-recognize-block-name-modifier.patch [bz#827500]
+- seabios-Add-ACPI_EXTRACT_PKG_START-macro-parsing.patch [bz#827500]
+- seabios-acpi-add-ssdt-for-pci-hotplug.patch [bz#827500]
+- seabios-Get-system-state-configuration-from-QEMU-and-patch-D.patch [bz#827500]
+- Resolves: bz#827500
+  (Config s3/s4 per VM - in seabios)
+
+* Thu Sep 06 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-20.el6
+- seabios-Add-romfile-code-to-assist-with-extract-integer-conf.patch [bz#831273]
+- seabios-Automatically-reboot-after-60-second-delay-on-failed.patch [bz#831273]
+- Resolves: bz#831273
+  (RFE: reboot VM if no bootable device found)
+
+* Tue Aug 28 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-19.el6_3
+- seabios-report-real-I-O-APIC-ID-0-on-MADT-and-MP-table.patch [bz#851245]
+- seabios-allow-CPUs-to-have-non-contiguous-Local-APIC-IDs.patch [bz#851245]
+- Resolves: bz#851245
+  (SeaBIOS: support non-contiguous APIC IDs)
+
 * Wed Apr 18 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-19.el6
 - seabios-increase-f-segment-memory-pool.patch [bz#810471]
 - Resolves: bz#810471
