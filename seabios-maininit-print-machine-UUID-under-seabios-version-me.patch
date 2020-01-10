@@ -1,0 +1,144 @@
+From d37cd2c4e05d89525656e7d1de026309688f00be Mon Sep 17 00:00:00 2001
+Message-Id: <d37cd2c4e05d89525656e7d1de026309688f00be.1366120578.git.minovotn@redhat.com>
+In-Reply-To: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+References: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Wed, 2 Jan 2013 10:21:09 +0100
+Subject: [PATCH 2/6] maininit(): print machine UUID under seabios version
+ message
+
+RH-Author: Laszlo Ersek <lersek@redhat.com>
+Message-id: <1357122071-6723-3-git-send-email-lersek@redhat.com>
+Patchwork-id: 45503
+O-Subject: [RHEL6.5 SeaBIOS PATCH v2 2/4] maininit(): print machine UUID under seabios version message
+Bugzilla: 876250
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Amos Kong <akong@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+There are users who would like to see the UUID at startup, and it probably
+won't bother others.
+
+Related RHBZ: 876250.
+
+(cherry picked from commit 37676f83adfe303f47603b2020d21ebcb67764c7)
+
+In RHEL-6 the caller function is still named post().
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ src/smbios.h |    1 +
+ src/post.c   |    3 ++
+ src/smbios.c |   68 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 72 insertions(+), 0 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/post.c   |  3 +++
+ src/smbios.c | 68 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/smbios.h |  1 +
+ 3 files changed, 72 insertions(+)
+
+diff --git a/src/post.c b/src/post.c
+index 43523dd..46d6c57 100644
+--- a/src/post.c
++++ b/src/post.c
+@@ -230,6 +230,9 @@ post(void)
+     // Run vga option rom
+     vga_setup();
+ 
++    // SMBIOS tables and VGA console are ready, print UUID
++    display_uuid();
++
+     // Do hardware initialization (if running synchronously)
+     if (!CONFIG_THREADS || !CONFIG_THREAD_OPTIONROMS) {
+         init_hw();
+diff --git a/src/smbios.c b/src/smbios.c
+index 7b60806..e12ab5a 100644
+--- a/src/smbios.c
++++ b/src/smbios.c
+@@ -515,3 +515,71 @@ smbios_init(void)
+     smbios_entry_point_init(max_struct_size, p - start, start, nr_structs);
+     free(start);
+ }
++
++void
++display_uuid(void)
++{
++    u32 addr, end;
++    u8 *uuid;
++    u8 empty_uuid[16] = { 0 };
++
++    if (SMBiosAddr == NULL)
++        return;
++
++    addr =        SMBiosAddr->structure_table_address;
++    end  = addr + SMBiosAddr->structure_table_length;
++
++    /* the following takes care of any initial wraparound too */
++    while (addr < end) {
++        const struct smbios_structure_header *hdr;
++
++        /* partial structure header */
++        if (end - addr < sizeof(struct smbios_structure_header))
++            return;
++
++        hdr = (struct smbios_structure_header *)addr;
++
++        /* partial structure */
++        if (end - addr < hdr->length)
++            return;
++
++        /* any Type 1 structure version will do that has the UUID */
++        if (hdr->type == 1 &&
++            hdr->length >= offsetof(struct smbios_type_1, uuid) + 16)
++            break;
++
++        /* done with formatted area, skip string-set */
++        addr += hdr->length;
++
++        while (end - addr >= 2 &&
++               (*(u8 *)addr     != '\0' ||
++                *(u8 *)(addr+1) != '\0'))
++            ++addr;
++
++        /* structure terminator not found */
++        if (end - addr < 2)
++            return;
++
++        addr += 2;
++    }
++
++    /* parsing finished, UUID not found */
++    if (addr == end)
++        return;
++
++    uuid = (u8 *)(addr + offsetof(struct smbios_type_1, uuid));
++    if (memcmp(uuid, empty_uuid, sizeof empty_uuid) == 0)
++        return;
++
++    printf("Machine UUID"
++             " %02x%02x%02x%02x"
++             "-%02x%02x"
++             "-%02x%02x"
++             "-%02x%02x"
++             "-%02x%02x%02x%02x%02x%02x\n"
++           , uuid[ 0], uuid[ 1], uuid[ 2], uuid[ 3]
++           , uuid[ 4], uuid[ 5]
++           , uuid[ 6], uuid[ 7]
++           , uuid[ 8], uuid[ 9]
++           , uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
++}
+diff --git a/src/smbios.h b/src/smbios.h
+index 9d54e80..5bf0392 100644
+--- a/src/smbios.h
++++ b/src/smbios.h
+@@ -165,4 +165,5 @@ struct smbios_type_127 {
+     struct smbios_structure_header header;
+ } PACKED;
+ 
++void display_uuid(void);
+ #endif // smbios.h
+-- 
+1.7.11.7
+

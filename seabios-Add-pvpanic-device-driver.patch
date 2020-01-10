@@ -1,0 +1,120 @@
+From 47d05b4b699ba071929185d58d778e8bab61e5d2 Mon Sep 17 00:00:00 2001
+Message-Id: <47d05b4b699ba071929185d58d778e8bab61e5d2.1369900914.git.minovotn@redhat.com>
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Tue, 21 May 2013 18:34:04 +0200
+Subject: [PATCH] Add pvpanic device driver
+
+RH-Author: Laszlo Ersek <lersek@redhat.com>
+Message-id: <1369161244-4704-1-git-send-email-lersek@redhat.com>
+Patchwork-id: 51514
+O-Subject: [RHEL6.5 SeaBIOS PATCH] Add pvpanic device driver
+Bugzilla: 963312
+RH-Acked-by: Andrew Jones <drjones@redhat.com>
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+
+Bugzilla: https://bugzilla.redhat.com/show_bug.cgi?id=963312
+Brew:     https://brewweb.devel.redhat.com/taskinfo?taskID=5806470
+Testing:  https://bugzilla.redhat.com/show_bug.cgi?id=833530#c19
+
+pvpanic device is used to notify host(qemu) when guest panic happens.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Hu Tao <hutao@cn.fujitsu.com>
+
+RHEL-6 notes:
+- manual port of upstream commit e9725dd76d5d7212cb4a97fd18ff2599538955cf,
+- rather than backporting
+    cf5bef4e acpi: move s3/s4/s5 to build_ssdt
+    3f8d735d Rename src/ssdt-susp.dsl to src/ssdt-misc.dsl.
+  etc., just add it to pcihp.
+
+Please-review: Paolo Bonzini <pbonzini@redhat.com>
+
+Thanks!
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ src/acpi.c         |    4 ++++
+ src/ssdt-pcihp.dsl |   46 ++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 50 insertions(+), 0 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi.c         |  4 ++++
+ src/ssdt-pcihp.dsl | 46 ++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 50 insertions(+)
+
+diff --git a/src/acpi.c b/src/acpi.c
+index a180fde..90bb075 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -491,6 +491,10 @@ static void* build_pcihp(void)
+         ssdt[acpi_s4_name[0]] = 'X';
+     else
+         ssdt[acpi_s4_pkg[0] + 1] = ssdt[acpi_s4_pkg[0] + 3] = sys_states[4] & 127;
++
++    int pvpanic_port = romfile_loadint("etc/pvpanic-port", 0x0);
++    *(u16 *)(ssdt + *ssdt_isa_pest) = pvpanic_port;
++
+     ((struct acpi_table_header*)ssdt)->checksum = 0;
+     ((struct acpi_table_header*)ssdt)->checksum -= checksum(ssdt, sizeof(ssdp_pcihp_aml));
+ 
+diff --git a/src/ssdt-pcihp.dsl b/src/ssdt-pcihp.dsl
+index cb8bf13..395f2af 100644
+--- a/src/ssdt-pcihp.dsl
++++ b/src/ssdt-pcihp.dsl
+@@ -37,4 +37,50 @@ DefinitionBlock ("ssdt-pcihp.aml", "SSDT", 0x01, "BXPC", "BXSSDTPCIHP", 0x1)
+             Zero   /* reserved */
+         })
+     }
++
++    External(\_SB.PCI0, DeviceObj)
++    External(\_SB.PCI0.ISA, DeviceObj)
++
++    Scope(\_SB.PCI0.ISA) {
++        Device(PEVT) {
++            Name(_HID, "QEMU0001")
++            /* PEST will be patched to be Zero if no such device */
++            ACPI_EXTRACT_NAME_WORD_CONST ssdt_isa_pest
++            Name(PEST, 0xFFFF)
++            OperationRegion(PEOR, SystemIO, PEST, 0x01)
++            Field(PEOR, ByteAcc, NoLock, Preserve) {
++                PEPT,   8,
++            }
++
++            Method(_STA, 0, NotSerialized) {
++                Store(PEST, Local0)
++                If (LEqual(Local0, Zero)) {
++                    Return (0x00)
++                } Else {
++                    Return (0x0F)
++                }
++            }
++
++            Method(RDPT, 0, NotSerialized) {
++                Store(PEPT, Local0)
++                Return (Local0)
++            }
++
++            Method(WRPT, 1, NotSerialized) {
++                Store(Arg0, PEPT)
++            }
++
++            Name(_CRS, ResourceTemplate() {
++                IO(Decode16, 0x00, 0x00, 0x01, 0x01, IO)
++            })
++
++            CreateWordField(_CRS, IO._MIN, IOMN)
++            CreateWordField(_CRS, IO._MAX, IOMX)
++
++            Method(_INI, 0, NotSerialized) {
++                Store(PEST, IOMN)
++                Store(PEST, IOMX)
++            }
++        }
++    }
+ }
+-- 
+1.7.11.7
+

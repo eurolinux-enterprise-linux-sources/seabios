@@ -3,7 +3,7 @@
 
 Name:           seabios
 Version:        0.6.1.2
-%define pkgrelease 26
+%define pkgrelease 28
 Release:        %{pkgrelease}%{?dist}
 Summary:        Open-source legacy BIOS implementation
 
@@ -198,6 +198,23 @@ Patch90: seabios-Get-system-state-configuration-from-QEMU-and-patch-D.patch
 Patch91: seabios-add-acpi-pmtimer-support.patch
 # For bz#771616 - Too big value of QXL-VGA ram_size and vram_size cause VM paused (internal-error)
 Patch92: seabios-pci-use-u64-for-pci-address-space-math.patch
+# For bz#876250 - Display 'SMBIOS GUID' at the BIOS post screen.
+Patch93: seabios-Use-coreboot-smbios-table-if-found.patch
+# For bz#876250 - Display 'SMBIOS GUID' at the BIOS post screen.
+Patch94: seabios-maininit-print-machine-UUID-under-seabios-version-me.patch
+# For bz#876250 - Display 'SMBIOS GUID' at the BIOS post screen.
+Patch95: seabios-display_uuid-fix-incomplete-check-after-the-loop.patch
+# For bz#876250 - Display 'SMBIOS GUID' at the BIOS post screen.
+Patch96: seabios-Minor-Separate-UUID-display-from-F12-boot-prompt.patch
+# For bz#846519 - [virtio-win][scsi]Guest  BSOD (9F) during s3/s4 while guest running crystal benchmark
+# For bz#846912 - [virtio-win][scsi] Disabling/enabling scsi driver stuck after S3/S4
+# For bz#846912, - [virtio-win][scsi] Disabling/enabling scsi driver stuck after S3/S4
+# For bz#846519 - [virtio-win][scsi]Guest  BSOD (9F) during s3/s4 while guest running crystal benchmark
+Patch97: seabios-acpi-do-not-let-guest-OSes-enable-disable-the-SCI.patch
+# For bz#888633 - don't boot from un-selected devices
+Patch98: seabios-boot-Support-halt-in-the-boot-order-to-prevent-defau.patch
+# For bz#963312 - [Hitachi 6.5 FEAT] (SeaBIOS) "virsh dump" support for automatic capturing and automatic actions after capturing.
+Patch99: seabios-Add-pvpanic-device-driver.patch
 
 %description
 SeaBIOS is an open-source legacy BIOS implementation which can be used as
@@ -299,6 +316,13 @@ that a typical x86 proprietary BIOS implements.
 %patch90 -p1
 %patch91 -p1
 %patch92 -p1
+%patch93 -p1
+%patch94 -p1
+%patch95 -p1
+%patch96 -p1
+%patch97 -p1
+%patch98 -p1
+%patch99 -p1
 
 %build
 chmod 755 tools/*.py
@@ -324,7 +348,26 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
-* Mon Dec 10 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-25.el6
+* Thu May 30 2013 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-28.el6
+- seabios-Add-pvpanic-device-driver.patch [bz#963312]
+- Resolves: bz#963312
+  ([Hitachi 6.5 FEAT] (SeaBIOS) "virsh dump" support for automatic capturing and automatic actions after capturing.)
+
+* Tue Apr 16 2013 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-27.el6
+- seabios-Use-coreboot-smbios-table-if-found.patch [bz#876250]
+- seabios-maininit-print-machine-UUID-under-seabios-version-me.patch [bz#876250]
+- seabios-display_uuid-fix-incomplete-check-after-the-loop.patch [bz#876250]
+- seabios-Minor-Separate-UUID-display-from-F12-boot-prompt.patch [bz#876250]
+- seabios-acpi-do-not-let-guest-OSes-enable-disable-the-SCI.patch [bz#846912]
+- seabios-boot-Support-halt-in-the-boot-order-to-prevent-defau.patch [bz#888633]
+- Resolves: bz#846912
+  ([virtio-win][scsi] Disabling/enabling scsi driver stuck after S3/S4)
+- Resolves: bz#876250
+  (Display 'SMBIOS GUID' at the BIOS post screen.)
+- Resolves: bz#888633
+  (don't boot from un-selected devices)
+
+* Mon Dec 10 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-26.el6
 - seabios-pci-use-u64-for-pci-address-space-math.patch [bz#771616]
 - Resolves: bz#771616
   (Too big value of QXL-VGA ram_size and vram_size cause VM paused (internal-error))

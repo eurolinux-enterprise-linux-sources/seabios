@@ -1,0 +1,78 @@
+From 8de3fc1f919120c977b983a53cfdf295002d9a21 Mon Sep 17 00:00:00 2001
+Message-Id: <8de3fc1f919120c977b983a53cfdf295002d9a21.1366120578.git.minovotn@redhat.com>
+In-Reply-To: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+References: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+From: Amos Kong <akong@redhat.com>
+Date: Tue, 19 Mar 2013 09:25:20 +0100
+Subject: [PATCH 6/6] boot: Support "halt" in the boot order to prevent
+ default boot attempts.
+
+RH-Author: Amos Kong <akong@redhat.com>
+Message-id: <1363685120-7560-1-git-send-email-akong@redhat.com>
+Patchwork-id: 49708
+O-Subject: [RHEL-6.5 seabios PATCH] boot: Support "halt" in the boot order to prevent default boot attempts.
+Bugzilla: 888633
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Bugzilla: 888633
+Test: tested in localhost
+
+Current seabios will attempt to boot from both configured devices and
+a list of default devices.  Sometimes it is desirable to only attempt
+to boot from the configured devices and not from any of the default
+devices.  This patch adds support for a "HALT" item in the "bootorder"
+file - its presence will prevent SeaBIOS from attempting any default
+boot actions.
+
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+Signed-off-by: Amos Kong <akong@redhat.com>
+(cherry picked from commit 54ae5436df92c8caf0a814a7c653adb1d75a084c)
+---
+ src/boot.c |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/boot.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/boot.c b/src/boot.c
+index ec4e74e..1db64b2 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -264,6 +264,7 @@ static struct bootentry_s *BootList;
+ #define IPL_TYPE_CBFS        0x20
+ #define IPL_TYPE_BEV         0x80
+ #define IPL_TYPE_BCV         0x81
++#define IPL_TYPE_HALT        0xf0
+ 
+ static void
+ bootentry_add(int type, int prio, u32 data, const char *desc)
+@@ -469,6 +470,10 @@ boot_prep(void)
+     interactive_bootmenu();
+     wait_threads();
+ 
++    int haltprio = find_prio("HALT");
++    if (haltprio >= 0)
++        bootentry_add(IPL_TYPE_HALT, haltprio, 0, "HALT");
++
+     // Map drives and populate BEV list
+     struct bootentry_s *pos = BootList;
+     while (pos) {
+@@ -654,6 +659,9 @@ do_boot(u16 seq_nr)
+     case IPL_TYPE_BEV:
+         boot_rom(ie->vector);
+         break;
++    case IPL_TYPE_HALT:
++        boot_fail();
++        break;
+     }
+ 
+     // Boot failed: invoke the boot recovery function
+-- 
+1.7.11.7
+

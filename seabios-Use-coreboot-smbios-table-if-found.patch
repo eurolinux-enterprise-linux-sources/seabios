@@ -1,0 +1,89 @@
+From e0586ce4f9e082b0249c552c58bce826a595d0b0 Mon Sep 17 00:00:00 2001
+Message-Id: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Wed, 2 Jan 2013 10:21:08 +0100
+Subject: [PATCH 1/6] Use coreboot smbios table if found.
+
+RH-Author: Laszlo Ersek <lersek@redhat.com>
+Message-id: <1357122071-6723-2-git-send-email-lersek@redhat.com>
+Patchwork-id: 45504
+O-Subject: [RHEL6.5 SeaBIOS PATCH v2 1/4] Use coreboot smbios table if found.
+Bugzilla: 876250
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Amos Kong <akong@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+The coreboot init code now looks for an existing smbios table and will
+use it.  A locally generated smbios table will only be created if no
+coreboot table is found.
+
+(cherry picked from commit 83012de1646d2d2156dbe2fe894fd2ca478c7ab5)
+
+RHEL-6 note:
+
+We don't support coreboot and the SMBiosAddr global is backported only as
+a dependency for the next patch. Accordingly, the "biostables.c" hunk is
+dropped (the file doesn't exist in RHEL-6), and so is the "coreboot.c"
+hunk (dead code in RHEL-6).
+
+To see why scan_tables() in "coreboot.c" is dead code: it could only be
+reached as in
+
+  _start() [src/post.c]
+    post()
+      init_bios_tables()
+        coreboot_copy_biostable() [src/coreboot.c]
+          scan_tables()
+
+but the init_bios_tables() -> coreboot_copy_biostable() call depends on
+CONFIG_COREBOOT.
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ src/smbios.h |    2 ++
+ src/smbios.c |    3 +++
+ 2 files changed, 5 insertions(+), 0 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/smbios.c | 3 +++
+ src/smbios.h | 2 ++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/src/smbios.c b/src/smbios.c
+index 7416e6f..7b60806 100644
+--- a/src/smbios.c
++++ b/src/smbios.c
+@@ -10,6 +10,8 @@
+ #include "paravirt.h" // qemu_cfg_smbios_load_field
+ #include "smbios.h" // struct smbios_entry_point
+ 
++struct smbios_entry_point *SMBiosAddr;
++
+ static void
+ smbios_entry_point_init(u16 max_structure_size,
+                         u16 structure_table_length,
+@@ -44,6 +46,7 @@ smbios_entry_point_init(u16 max_structure_size,
+ 
+     ep->intermediate_checksum -= checksum((void*)ep + 0x10, ep->length - 0x10);
+ 
++    SMBiosAddr = ep;
+     dprintf(1, "SMBIOS ptr=%p table=%p\n", ep, finaltable);
+ }
+ 
+diff --git a/src/smbios.h b/src/smbios.h
+index 7bf2bed..9d54e80 100644
+--- a/src/smbios.h
++++ b/src/smbios.h
+@@ -24,6 +24,8 @@ struct smbios_entry_point {
+     u8 smbios_bcd_revision;
+ } PACKED;
+ 
++extern struct smbios_entry_point *SMBiosAddr;
++
+ /* This goes at the beginning of every SMBIOS structure. */
+ struct smbios_structure_header {
+     u8 type;
+-- 
+1.7.11.7
+

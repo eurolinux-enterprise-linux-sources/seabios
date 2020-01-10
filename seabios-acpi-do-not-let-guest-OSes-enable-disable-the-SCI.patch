@@ -1,0 +1,101 @@
+From c7b2cc18e8d04fc3069bf212d713ab250dc1568f Mon Sep 17 00:00:00 2001
+Message-Id: <c7b2cc18e8d04fc3069bf212d713ab250dc1568f.1366120578.git.minovotn@redhat.com>
+In-Reply-To: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+References: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 15 Mar 2013 09:49:44 +0100
+Subject: [PATCH 5/6] acpi: do not let guest OSes enable/disable the SCI
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1363340984-5066-1-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 49632
+O-Subject: [PATCH 6.5 seabios] acpi: do not let guest OSes enable/disable the SCI
+Bugzilla: 846519 846912
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Amos Kong <akong@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+Bugzilla: 846912, 846519
+
+Upstream: based on commit f64a472a481784231fbf8541825501df411b11d1
+
+Brew build: http://brewweb.devel.redhat.com/brew/taskinfo?taskID=5510256
+
+The SCI cannot be disabled and is always attached to GSI 9.  We only
+need LNKS in order to override the polarity to active high, and match
+the content of the MADT.  But the old code erroneously used the same
+PCI configuration space field as LNKA.  Thus, disabling LNKA would
+disable LNKS too and vice versa.  Windows tried to disable LNKS during
+s3/s4, and thus devices using LNKA stopped working.
+
+To avoid this, _DIS can be a no-op (and for completeness I added a dummy
+_SRS method too); _STA always returns the device as enabled (bit 1),
+and _CRS never returns zero in the interrupt field.
+
+Thanks Gal for the analysis and QE for testing, I'm just the one that
+posts the patch. :)
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ src/acpi-dsdt.dsl | 40 ++++++++--------------------------------
+ 1 file changed, 8 insertions(+), 32 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi-dsdt.dsl | 40 ++++++++--------------------------------
+ 1 file changed, 8 insertions(+), 32 deletions(-)
+
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index 2a92abc..1c89a24 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -671,38 +671,14 @@ DefinitionBlock (
+                     Interrupt (, Level, ActiveHigh, Shared)
+                         { 9 }
+                 })
+-                Method (_STA, 0, NotSerialized)
+-                {
+-                    Store (0x0B, Local0)
+-                    If (And (0x80, PRQ0, Local1))
+-                    {
+-                         Store (0x09, Local0)
+-                    }
+-                    Return (Local0)
+-                }
+-                Method (_DIS, 0, NotSerialized)
+-                {
+-                    Or (PRQ0, 0x80, PRQ0)
+-                }
+-                Method (_CRS, 0, NotSerialized)
+-                {
+-                    Name (PRR0, ResourceTemplate ()
+-                    {
+-                        Interrupt (, Level, ActiveHigh, Shared)
+-                            {9}
+-                    })
+-                    CreateDWordField (PRR0, 0x05, TMP)
+-                    Store (PRQ0, Local0)
+-                    If (LLess (Local0, 0x80))
+-                    {
+-                        Store (Local0, TMP)
+-                    }
+-                    Else
+-                    {
+-                        Store (Zero, TMP)
+-                    }
+-                    Return (PRR0)
+-                }
++
++                // The SCI cannot be disabled and is always attached to GSI 9,
++                // so these are no-ops.  We only need this link to override the
++                // polarity to active high and match the content of the MADT.
++                Method(_STA, 0, NotSerialized) { Return (0x0b) }
++                Method(_DIS, 0, NotSerialized) { }
++                Method(_CRS, 0, NotSerialized) { Return (_PRS) }
++                Method(_SRS, 1, NotSerialized) { }
+         }
+     }
+ 
+-- 
+1.7.11.7
+

@@ -1,0 +1,66 @@
+From 2b5c3a5743468a02abb0b8dba40e82a3e3e8916b Mon Sep 17 00:00:00 2001
+Message-Id: <2b5c3a5743468a02abb0b8dba40e82a3e3e8916b.1366120578.git.minovotn@redhat.com>
+In-Reply-To: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+References: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Wed, 2 Jan 2013 10:21:11 +0100
+Subject: [PATCH 4/6] Minor: Separate UUID display from F12 boot prompt.
+
+RH-Author: Laszlo Ersek <lersek@redhat.com>
+Message-id: <1357122071-6723-5-git-send-email-lersek@redhat.com>
+Patchwork-id: 45505
+O-Subject: [RHEL6.5 SeaBIOS PATCH v2 4/4] Minor: Separate UUID display from F12 boot prompt.
+Bugzilla: 876250
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Amos Kong <akong@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Place the extra newline as part of the F12 prompt instead of the
+SeaBIOS version banner so that a UUID report (when present) is still
+visually separated from the boot menu prompt.
+
+(cherry picked from commit 57174c7276a3ae87ca5cbdc7c2aca4812a4fac0a)
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ src/boot.c       |    2 +-
+ src/bootsplash.c |    2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/boot.c       | 2 +-
+ src/bootsplash.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 93ae83b..ec4e74e 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -371,7 +371,7 @@ interactive_bootmenu(void)
+     while (get_keystroke(0) >= 0)
+         ;
+ 
+-    printf("Press F12 for boot menu.\n\n");
++    printf("\nPress F12 for boot menu.\n\n");
+ 
+     enable_bootsplash();
+     int scan_code = get_keystroke(CONFIG_BOOTMENU_WAIT);
+diff --git a/src/bootsplash.c b/src/bootsplash.c
+index cf1a603..1e745d2 100644
+--- a/src/bootsplash.c
++++ b/src/bootsplash.c
+@@ -104,7 +104,7 @@ enable_vga_console(void)
+     call16_int10(&br);
+ 
+     // Write to screen.
+-    printf("SeaBIOS (version %s)\n\n", VERSION);
++    printf("SeaBIOS (version %s)\n", VERSION);
+ }
+ 
+ static int
+-- 
+1.7.11.7
+

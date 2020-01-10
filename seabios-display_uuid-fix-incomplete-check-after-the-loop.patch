@@ -1,0 +1,52 @@
+From 60db3a2b124b5459b65a0be1a65e630191c259ef Mon Sep 17 00:00:00 2001
+Message-Id: <60db3a2b124b5459b65a0be1a65e630191c259ef.1366120578.git.minovotn@redhat.com>
+In-Reply-To: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+References: <e0586ce4f9e082b0249c552c58bce826a595d0b0.1366120578.git.minovotn@redhat.com>
+From: Laszlo Ersek <lersek@redhat.com>
+Date: Wed, 2 Jan 2013 10:21:10 +0100
+Subject: [PATCH 3/6] display_uuid(): fix incomplete check after the loop
+
+RH-Author: Laszlo Ersek <lersek@redhat.com>
+Message-id: <1357122071-6723-4-git-send-email-lersek@redhat.com>
+Patchwork-id: 45506
+O-Subject: [RHEL6.5 SeaBIOS PATCH v2 3/4] display_uuid(): fix incomplete check after the loop
+Bugzilla: 876250
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Amos Kong <akong@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+In the v2->v3 change of what would become commit 37676f83
+<http://www.seabios.org/pipermail/seabios/2012-December/005166.html>, the
+defense against an initial "addr > end" condition ("wraparound") was
+erroneously loosened.
+
+(cherry picked from commit 9c6fb72b852dbeea752caa05bbdc4236dbb08d40)
+
+Signed-off-by: Laszlo Ersek <lersek@redhat.com>
+---
+ src/smbios.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/smbios.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/smbios.c b/src/smbios.c
+index e12ab5a..c15b82d 100644
+--- a/src/smbios.c
++++ b/src/smbios.c
+@@ -563,8 +563,8 @@ display_uuid(void)
+         addr += 2;
+     }
+ 
+-    /* parsing finished, UUID not found */
+-    if (addr == end)
++    /* parsing finished or skipped entirely, UUID not found */
++    if (addr >= end)
+         return;
+ 
+     uuid = (u8 *)(addr + offsetof(struct smbios_type_1, uuid));
+-- 
+1.7.11.7
+
