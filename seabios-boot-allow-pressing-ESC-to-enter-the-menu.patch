@@ -1,0 +1,65 @@
+From 046fce3f7be6316d3cb0b2f1bf5ef52d94d20bdf Mon Sep 17 00:00:00 2001
+Message-Id: <046fce3f7be6316d3cb0b2f1bf5ef52d94d20bdf.1426731456.git.jen@redhat.com>
+In-Reply-To: <8972e484779313277f99fca082371e918d322044.1426731456.git.jen@redhat.com>
+References: <8972e484779313277f99fca082371e918d322044.1426731456.git.jen@redhat.com>
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Mon, 16 Mar 2015 17:23:58 -0400
+Subject: [CHANGE 2/2] boot: allow pressing ESC to enter the menu
+To: rhvirt-patches@redhat.com,
+    jen@redhat.com
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1426526638-8380-3-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 64398
+O-Subject: [RHEL6.7 seabios PATCH 2/2] boot: allow pressing ESC to enter the menu
+Bugzilla: 1131530
+RH-Acked-by: Wei Huang <wei@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Bandan Das <bsd@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+The customer asked for a way to enter the menu that is not trapped
+by the terminal or the OS.  They suggested ESC+! or ESC+@ which are
+used on bare metal serial consoles for similar purposes.
+
+However, the upstream maintainer did not quite express enthusiasm for
+this suggestion, and preferred using ESC for the boot menu (something
+that Chromebooks already do).  Accept upstream solution, but keep the
+old meaning of F12 just for the sake of RHEL6.  The patch has to be
+redone anyway, because RHEL6 does not have fw_cfg entries to configure
+the menu key and the boot message.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry picked from commit a1ac8861049a5ffefc26ca294293ad666954fcc8)
+---
+ src/boot.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+Signed-off-by: Jeff E. Nelson <jen@redhat.com>
+---
+ src/boot.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index a5a80d5..535c655 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -372,13 +372,12 @@ interactive_bootmenu(void)
+     while (get_keystroke(0) >= 0)
+         ;
+ 
+-    printf("\nPress F12 for boot menu.\n\n");
++    printf("\nPress ESC or F12 for boot menu.\n\n");
+ 
+     enable_bootsplash();
+     int scan_code = get_keystroke(CONFIG_BOOTMENU_WAIT);
+     disable_bootsplash();
+-    if (scan_code != 0x86)
+-        /* not F12 */
++    if (scan_code != 0x86 && scan_code != 1)
+         return;
+ 
+     int menukey = scan_code;
+-- 
+2.1.0
+

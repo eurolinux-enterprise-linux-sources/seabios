@@ -1,0 +1,70 @@
+From 8972e484779313277f99fca082371e918d322044 Mon Sep 17 00:00:00 2001
+Message-Id: <8972e484779313277f99fca082371e918d322044.1426731456.git.jen@redhat.com>
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Mon, 16 Mar 2015 17:23:57 -0400
+Subject: [CHANGE 1/2] boot.c: delay exiting boot if menu key is ESC
+To: rhvirt-patches@redhat.com,
+    jen@redhat.com
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1426526638-8380-2-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 64397
+O-Subject: [RHEL6.7 seabios PATCH 1/2] boot.c: delay exiting boot if menu key is ESC
+Bugzilla: 1131530
+RH-Acked-by: Wei Huang <wei@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Bandan Das <bsd@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+If the menu key is ESC, do not restart boot unless
+1.5 seconds have passed.  Otherwise users (trained by years of
+repeatedly hitting keys to enter the BIOS) will end up hitting ESC
+multiple times and immediately booting the primary boot device.
+
+Suggested-by: Matt DeVillier <matt.devillier@gmail.com>
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry picked from commit 80aae26c9ef060bde15aebd84d0cc79a978706a9)
+
+[RHEL: declare menukey variable, use old names for irqtimer_calc
+ and irqtimer_check]
+---
+ src/boot.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+Signed-off-by: Jeff E. Nelson <jen@redhat.com>
+---
+ src/boot.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 6208abf..a5a80d5 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -381,6 +381,7 @@ interactive_bootmenu(void)
+         /* not F12 */
+         return;
+ 
++    int menukey = scan_code;
+     while (get_keystroke(0) >= 0)
+         ;
+ 
+@@ -398,9 +399,15 @@ interactive_bootmenu(void)
+         pos = pos->next;
+     }
+ 
+-    // Get key press
++    // Get key press.  If the menu key is ESC, do not restart boot unless
++    // 1.5 seconds have passed.  Otherwise users (trained by years of
++    // repeatedly hitting keys to enter the BIOS) will end up hitting ESC
++    // multiple times and immediately booting the primary boot device.
++    int esc_accepted_time = calc_future_timer(menukey == 1 ? 1500 : 0);
+     for (;;) {
+         scan_code = get_keystroke(1000);
++        if (scan_code == 1 && !check_timer(esc_accepted_time))
++            continue;
+         if (scan_code >= 1 && scan_code <= maxmenu+1)
+             break;
+     }
+-- 
+2.1.0
+

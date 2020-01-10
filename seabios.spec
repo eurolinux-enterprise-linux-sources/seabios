@@ -3,7 +3,7 @@
 
 Name:           seabios
 Version:        0.6.1.2
-%define pkgrelease 28
+%define pkgrelease 30
 Release:        %{pkgrelease}%{?dist}
 Summary:        Open-source legacy BIOS implementation
 
@@ -215,6 +215,12 @@ Patch97: seabios-acpi-do-not-let-guest-OSes-enable-disable-the-SCI.patch
 Patch98: seabios-boot-Support-halt-in-the-boot-order-to-prevent-defau.patch
 # For bz#963312 - [Hitachi 6.5 FEAT] (SeaBIOS) "virsh dump" support for automatic capturing and automatic actions after capturing.
 Patch99: seabios-Add-pvpanic-device-driver.patch
+# For bz#1129930 - fail to assign correct order for the boot device in seabios as we specified the bootindex in qemu-kvm cli(under the same virtio-scsi-pci)
+Patch100: seabios-boot-Fix-boot-order-for-SCSI-target-lun-9.patch
+# For bz#1131530 - Provide a platform agnostic approach to invoking the BIOS, boot menu, or other BIOS functions
+Patch101: seabios-boot.c-delay-exiting-boot-if-menu-key-is-ESC.patch
+# For bz#1131530 - Provide a platform agnostic approach to invoking the BIOS, boot menu, or other BIOS functions
+Patch102: seabios-boot-allow-pressing-ESC-to-enter-the-menu.patch
 
 %description
 SeaBIOS is an open-source legacy BIOS implementation which can be used as
@@ -323,6 +329,9 @@ that a typical x86 proprietary BIOS implements.
 %patch97 -p1
 %patch98 -p1
 %patch99 -p1
+%patch100 -p1
+%patch101 -p1
+%patch102 -p1
 
 %build
 chmod 755 tools/*.py
@@ -348,6 +357,17 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Mar 18 2015 Jeff E. Nelson <jen@redhat.com> - 0.6.1.2-30.el6
+- seabios-boot.c-delay-exiting-boot-if-menu-key-is-ESC.patch [bz#1131530]
+- seabios-boot-allow-pressing-ESC-to-enter-the-menu.patch [bz#1131530]
+- Resolves: bz#1131530
+  (Provide a platform agnostic approach to invoking the BIOS, boot menu, or other BIOS functions)
+
+* Tue Dec 23 2014 Jeff E. Nelson <jen@redhat.com> - 0.6.1.2-29.el6
+- seabios-boot-Fix-boot-order-for-SCSI-target-lun-9.patch [bz#1129930]
+- Resolves: bz#1129930
+  (fail to assign correct order for the boot device in seabios as we specified the bootindex in qemu-kvm cli(under the same virtio-scsi-pci))
+
 * Thu May 30 2013 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-28.el6
 - seabios-Add-pvpanic-device-driver.patch [bz#963312]
 - Resolves: bz#963312

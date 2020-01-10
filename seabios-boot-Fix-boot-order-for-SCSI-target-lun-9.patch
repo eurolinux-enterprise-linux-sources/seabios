@@ -1,0 +1,79 @@
+From 2ab47f0bfc76ea6378ae1b4b86a6992b7047ee51 Mon Sep 17 00:00:00 2001
+Message-Id: <2ab47f0bfc76ea6378ae1b4b86a6992b7047ee51.1419362069.git.jen@redhat.com>
+From: Markus Armbruster <armbru@pond.sub.org>
+Date: Fri, 15 Aug 2014 15:18:37 -0500
+Subject: [CHANGE] boot: Fix boot order for SCSI target, lun > 9
+To: rhvirt-patches@redhat.com,
+    jen@redhat.com
+
+RH-Author: Markus Armbruster <armbru@pond.sub.org>
+Message-id: <1408115917-3072-2-git-send-email-armbru@pond.sub.org>
+Patchwork-id: 60597
+O-Subject: [PATCH RHEL-6.6 seabios 1/1] boot: Fix boot order for SCSI target, lun > 9
+Bugzilla: 1129930
+RH-Acked-by: Jeff Nelson <jenelson@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Amos Kong <akong@redhat.com>
+
+From: Markus Armbruster <armbru@redhat.com>
+
+We identify devices by their Open Firmware device paths.  The path
+component for the logical unit on a bus is incorrect:
+bootprio_find_scsi_device() and bootprio_find_usb() format target
+(a.k.a. SCSI ID) and lun in decimal, while QEMU uses hexadecimal.
+Bootorder list entries with target, lun > 9 aren't found (lucky case),
+or attributed to the wrong logical unit (unlucky case).
+
+The relevant spec[*] agrees with QEMU (and OVMF, for that matter).
+Change %d to %x.
+
+No actual impact on USB, because QEMU only uses LUN 0 there.
+
+RHBZ: https://bugzilla.redhat.com/show_bug.cgi?id=1096560
+
+[*] Open Firmware Recommended Practice: SCSI-3 Parallel Interface,
+Version 1, Section 3.1 Physical Address Formats and Representations
+http://www.openfirmware.org/1275/practice/spi/spi1_0.ps
+IEEE Standard for Boot (Initialization Configuration) Firmware: Core
+Requirements and Practices, IEEE Std 1275-1994, Annex E SCSI host
+adapter package class, section E.2.1 Physical address formats and
+representations
+
+Signed-off-by: Markus Armbruster <armbru@redhat.com>
+(cherry picked from commit 275672eb70efdf81c51b997d41a4409b404aa8f6)
+Signed-off-by: Jeff E. Nelson <jen@redhat.com>
+
+Conflicts:
+	src/boot.c
+
+Conflict in bootprio_find_scsi_device() is straightforward to resolve.
+
+The USB part isn't applicable, because we don't have commit 7fa31b5
+"Support USB MSC devices with multiples LUNs".
+
+Signed-off-by: Markus Armbruster <armbru@pond.sub.org>
+---
+ src/boot.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Signed-off-by: Jeff E. Nelson <jen@redhat.com>
+---
+ src/boot.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 1db64b2..6208abf 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -127,7 +127,7 @@ int bootprio_find_scsi_device(int bdf, int target, int lun)
+     // Find scsi drive - for example: /pci@i0cf8/scsi@5/channel@0/disk@1,0
+     char desc[256], *p;
+     p = build_pci_path(desc, sizeof(desc), "*", bdf);
+-    snprintf(p, desc+sizeof(desc)-p, "/*@0/*@%d,%d", target, lun);
++    snprintf(p, desc+sizeof(desc)-p, "/*@0/*@%x,%x", target, lun);
+     return find_prio(desc);
+ }
+ 
+-- 
+2.1.0
+
