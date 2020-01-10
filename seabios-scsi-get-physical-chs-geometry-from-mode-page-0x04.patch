@@ -1,0 +1,127 @@
+From 3b06e044851ab345119ad56b61322d7ca5d534e1 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:08 +0100
+Subject: [PATCH 17/22] scsi: get physical chs geometry from mode page 0x04
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-18-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36973
+O-Subject: [RHEL6.3 PATCH seabios 17/22] scsi: get physical chs geometry from mode page 0x04
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+The mode page is marked as obsolete, but QEMU can provide the information.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from 000e084893985208513864a65695e8fbcbd1162f)
+---
+ src/blockcmd.c |   32 ++++++++++++++++++++++++++++++++
+ src/blockcmd.h |   29 +++++++++++++++++++++++++++++
+ 2 files changed, 61 insertions(+), 0 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/blockcmd.c |   32 ++++++++++++++++++++++++++++++++
+ src/blockcmd.h |   29 +++++++++++++++++++++++++++++
+ 2 files changed, 61 insertions(+), 0 deletions(-)
+
+diff --git a/src/blockcmd.c b/src/blockcmd.c
+index 1aba3c0..a18003a 100644
+--- a/src/blockcmd.c
++++ b/src/blockcmd.c
+@@ -128,6 +128,23 @@ scsi_init_drive(struct drive_s *drive, const char *s, int *pdt, char **desc)
+     dprintf(1, "%s blksize=%d sectors=%d\n"
+             , s, drive->blksize, (unsigned)drive->sectors);
+ 
++    struct cdbres_mode_sense_geom geomdata;
++    ret = cdb_mode_sense_geom(&dop, &geomdata);
++    if (ret == 0) {
++        u32 cylinders;
++        cylinders = geomdata.cyl[0] << 16;
++        cylinders |= geomdata.cyl[1] << 8;
++        cylinders |= geomdata.cyl[2];
++        if (cylinders && geomdata.heads &&
++            drive->sectors <= 0xFFFFFFFFULL &&
++            ((u32)drive->sectors % (geomdata.heads * cylinders) == 0)) {
++            drive->pchs.cylinders = cylinders;
++            drive->pchs.heads = geomdata.heads;
++            drive->pchs.spt = (u32)drive->sectors
++     / (geomdata.heads * cylinders);
++        }
++    }
++
+     *desc = znprintf(MAXDESCSIZE, "%s Drive %s %s %s"
+                       , s, vendor, product, rev);
+     return 0;
+@@ -182,6 +199,21 @@ cdb_read_capacity(struct disk_op_s *op, struct cdbres_read_capacity *data)
+     return cdb_cmd_data(op, &cmd, sizeof(*data));
+ }
+ 
++// Mode sense, geometry page.
++int
++cdb_mode_sense_geom(struct disk_op_s *op, struct cdbres_mode_sense_geom *data)
++{
++    struct cdb_mode_sense cmd;
++    memset(&cmd, 0, sizeof(cmd));
++    cmd.command = CDB_CMD_MODE_SENSE;
++    cmd.flags = 8; /* DBD */
++    cmd.page = MODE_PAGE_HD_GEOMETRY;
++    cmd.count = htons(sizeof(*data));
++    op->count = 1;
++    op->buf_fl = data;
++    return cdb_cmd_data(op, &cmd, sizeof(*data));
++}
++
+ // Read sectors.
+ int
+ cdb_read(struct disk_op_s *op)
+diff --git a/src/blockcmd.h b/src/blockcmd.h
+index 13ae991..bace649 100644
+--- a/src/blockcmd.h
++++ b/src/blockcmd.h
+@@ -71,11 +71,40 @@ struct cdbres_inquiry {
+     char rev[4];
+ } PACKED;
+ 
++#define CDB_CMD_MODE_SENSE    0x5A
++#define MODE_PAGE_HD_GEOMETRY 0x04
++
++struct cdb_mode_sense {
++    u8 command;
++    u8 flags;
++    u8 page;
++    u32 reserved_03;
++    u16 count;
++    u8 reserved_09;
++    u8 pad[6];
++} PACKED;
++
++struct cdbres_mode_sense_geom {
++    u8 unused_00[3];
++    u8 read_only;
++    u32 unused_04;
++    u8 page;
++    u8 length;
++    u8 cyl[3];
++    u8 heads;
++    u8 precomp[3];
++    u8 reduced[3];
++    u16 step_rate;
++    u8 landing[3];
++    u16 rpm;
++} PACKED;
++
+ // blockcmd.c
+ int cdb_get_inquiry(struct disk_op_s *op, struct cdbres_inquiry *data);
+ int cdb_get_sense(struct disk_op_s *op, struct cdbres_request_sense *data);
+ int cdb_test_unit_ready(struct disk_op_s *op);
+ int cdb_read_capacity(struct disk_op_s *op, struct cdbres_read_capacity *data);
++int cdb_mode_sense_geom(struct disk_op_s *op, struct cdbres_mode_sense_geom *data);
+ int cdb_inquiry(struct disk_op_s *op, struct cdbres_inquiry *data);
+ int cdb_read(struct disk_op_s *op);
+ int cdb_write(struct disk_op_s *op);
+-- 
+1.7.7.6
+

@@ -1,0 +1,110 @@
+From 1c44401fd5e5595547b018300611662103893b07 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:01 +0100
+Subject: [PATCH 10/22] usb-msc: support WRITE commands
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-11-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36976
+O-Subject: [RHEL6.3 PATCH seabios 10/22] usb-msc: support WRITE commands
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+Writes only require building the CDB and some care with the direction
+in the USB packet.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from ddb8cebd80573e72e2f43fbd6a948fcfcef02f0c)
+---
+ src/blockcmd.c |   12 ++++++++++++
+ src/blockcmd.h |    1 +
+ src/usb-msc.c  |   12 ++++++------
+ 3 files changed, 19 insertions(+), 6 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/blockcmd.c |   12 ++++++++++++
+ src/blockcmd.h |    1 +
+ src/usb-msc.c  |   12 ++++++------
+ 3 files changed, 19 insertions(+), 6 deletions(-)
+
+diff --git a/src/blockcmd.c b/src/blockcmd.c
+index 48568e6..9b37006 100644
+--- a/src/blockcmd.c
++++ b/src/blockcmd.c
+@@ -76,3 +76,15 @@ cdb_read(struct disk_op_s *op)
+     cmd.count = htons(op->count);
+     return cdb_cmd_data(op, &cmd, GET_GLOBAL(op->drive_g->blksize));
+ }
++
++// Write sectors.
++int
++cdb_write(struct disk_op_s *op)
++{
++    struct cdb_rwdata_10 cmd;
++    memset(&cmd, 0, sizeof(cmd));
++    cmd.command = CDB_CMD_WRITE_10;
++    cmd.lba = htonl(op->lba);
++    cmd.count = htons(op->count);
++    return cdb_cmd_data(op, &cmd, GET_GLOBAL(op->drive_g->blksize));
++}
+diff --git a/src/blockcmd.h b/src/blockcmd.h
+index 903c435..a92ed92 100644
+--- a/src/blockcmd.h
++++ b/src/blockcmd.h
+@@ -73,5 +73,6 @@ int cdb_get_sense(struct disk_op_s *op, struct cdbres_request_sense *data);
+ int cdb_read_capacity(struct disk_op_s *op, struct cdbres_read_capacity *data);
+ int cdb_inquiry(struct disk_op_s *op, struct cdbres_inquiry *data);
+ int cdb_read(struct disk_op_s *op);
++int cdb_write(struct disk_op_s *op);
+ 
+ #endif // blockcmd.h
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index 54a5217..63ec340 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -70,13 +70,13 @@ usb_cmd_data(struct disk_op_s *op, void *cdbcmd, u16 blocksize)
+     u32 bytes = blocksize * op->count;
+     struct cbw_s cbw;
+     memset(&cbw, 0, sizeof(cbw));
++    memcpy(cbw.CBWCB, cdbcmd, USB_CDB_SIZE);
+     cbw.dCBWSignature = CBW_SIGNATURE;
+     cbw.dCBWTag = 999; // XXX
+     cbw.dCBWDataTransferLength = bytes;
+-    cbw.bmCBWFlags = USB_DIR_IN; // XXX
++    cbw.bmCBWFlags = (cbw.CBWCB[0] == CDB_CMD_WRITE_10) ? USB_DIR_OUT : USB_DIR_IN;
+     cbw.bCBWLUN = 0; // XXX
+     cbw.bCBWCBLength = USB_CDB_SIZE;
+-    memcpy(cbw.CBWCB, cdbcmd, USB_CDB_SIZE);
+ 
+     // Transfer cbw to device.
+     int ret = usb_msc_send(udrive_g, USB_DIR_OUT
+@@ -84,9 +84,9 @@ usb_cmd_data(struct disk_op_s *op, void *cdbcmd, u16 blocksize)
+     if (ret)
+         goto fail;
+ 
+-    // Transfer data from device.
++    // Transfer data to/from device.
+     if (bytes) {
+-        ret = usb_msc_send(udrive_g, USB_DIR_IN, op->buf_fl, bytes);
++        ret = usb_msc_send(udrive_g, cbw.bmCBWFlags, op->buf_fl, bytes);
+         if (ret)
+             goto fail;
+     }
+@@ -128,9 +128,9 @@ process_usb_op(struct disk_op_s *op)
+     switch (op->command) {
+     case CMD_READ:
+         return cdb_read(op);
+-    case CMD_FORMAT:
+     case CMD_WRITE:
+-        return DISK_RET_EWRITEPROTECT;
++        return cdb_write(op);
++    case CMD_FORMAT:
+     case CMD_RESET:
+     case CMD_ISREADY:
+     case CMD_VERIFY:
+-- 
+1.7.7.6
+

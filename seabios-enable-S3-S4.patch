@@ -1,0 +1,50 @@
+From 55aeb905225dbe6fcfece8b707521b34fedc9b2e Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Tue, 13 Mar 2012 10:54:00 +0100
+Subject: [PATCH] enable S3/S4
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20120313105400.GM2304@redhat.com>
+Patchwork-id: 38476
+O-Subject: [PATCH RHEL6.3 SeaBIOS] enable S3/S4
+Bugzilla: 761586
+RH-Acked-by: Amit Shah <amit.shah@redhat.com>
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Luiz Capitulino <lcapitulino@redhat.com>
+
+Enabling S4/S3 Since it should work now with all supported guests.
+
+BZ: 761586
+Upstream: not needed.
+
+--
+			Gleb.
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi-dsdt.dsl |    2 --
+ 1 files changed, 0 insertions(+), 2 deletions(-)
+
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index be888c1..62fa26a 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -703,7 +703,6 @@ DefinitionBlock (
+         }
+     }
+ 
+-#ifdef DSDT_PM
+     /*
+      * S3 (suspend-to-ram), S4 (suspend-to-disk) and S5 (power-off) type codes:
+      * must match piix4 emulation.
+@@ -722,7 +721,6 @@ DefinitionBlock (
+         Zero,  /* reserved */
+         Zero   /* reserved */
+     })
+-#endif
+     Name (\_S5, Package (0x04)
+     {
+         Zero,  /* PM1a_CNT.SLP_TYP */
+-- 
+1.7.7.6
+

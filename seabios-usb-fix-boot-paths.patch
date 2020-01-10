@@ -1,0 +1,49 @@
+From c6dc8f480f90672c890a2940f62774436ea0e6e8 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:35:52 +0100
+Subject: [PATCH 01/22] usb: fix boot paths
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-2-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36969
+O-Subject: [RHEL6.3 PATCH seabios 01/22] usb: fix boot paths
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+The fw paths for USB devices that SeaBIOS computes are off-by-one,
+because QEMU builds those paths with a numbering that starts from one
+(see usb_fill_port and usb_hub_initfn in QEMU).  Fix that so that
+the numbering agrees.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from 2762de0867345d059ab70690f98144921f8e151b)
+---
+ src/boot.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/boot.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 826de37..afb8037 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -171,9 +171,9 @@ int bootprio_find_usb(int bdf, u64 path)
+     for (i=56; i>0; i-=8) {
+         int port = (path >> i) & 0xff;
+         if (port != 0xff)
+-            p += snprintf(p, desc+sizeof(desc)-p, "/hub@%x", port);
++            p += snprintf(p, desc+sizeof(desc)-p, "/hub@%x", port+1);
+     }
+-    snprintf(p, desc+sizeof(desc)-p, "/*@%x", (u32)(path & 0xff));
++    snprintf(p, desc+sizeof(desc)-p, "/*@%x", (u32)(path & 0xff)+1);
+     return find_prio(desc);
+ }
+ 
+-- 
+1.7.7.6
+

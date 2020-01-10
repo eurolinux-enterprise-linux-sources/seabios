@@ -1,0 +1,184 @@
+From bb0f21d37bce7bb6112308667cfcef939b1a1a99 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:06 +0100
+Subject: [PATCH 15/22] usb-msc: move common scsi code to blockcmd.c
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-16-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36977
+O-Subject: [RHEL6.3 PATCH seabios 15/22] usb-msc: move common scsi code to blockcmd.c
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+Finally move the INQUIRY/TEST UNIT READY/READ CAPACITY sequence to
+generic code, so that virtio-scsi will be able to use it.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from ded04a3a21b73a7723831e39972a0f6af4a36914)
+---
+ src/blockcmd.c |   61 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/blockcmd.h |    1 +
+ src/usb-msc.c  |   51 ++++++----------------------------------------
+ 3 files changed, 69 insertions(+), 44 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/blockcmd.c |   61 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/blockcmd.h |    1 +
+ src/usb-msc.c  |   51 ++++++----------------------------------------
+ 3 files changed, 69 insertions(+), 44 deletions(-)
+
+diff --git a/src/blockcmd.c b/src/blockcmd.c
+index f5b7126..1aba3c0 100644
+--- a/src/blockcmd.c
++++ b/src/blockcmd.c
+@@ -72,6 +72,67 @@ scsi_is_ready(struct disk_op_s *op)
+     return 0;
+ }
+ 
++// Validate drive and find block size and sector count.
++int
++scsi_init_drive(struct drive_s *drive, const char *s, int *pdt, char **desc)
++{
++    if (!CONFIG_USB_MSC)
++        return 0;
++
++    struct disk_op_s dop;
++    memset(&dop, 0, sizeof(dop));
++    dop.drive_g = drive;
++    struct cdbres_inquiry data;
++    int ret = cdb_get_inquiry(&dop, &data);
++    if (ret)
++        return ret;
++    char vendor[sizeof(data.vendor)+1], product[sizeof(data.product)+1];
++    char rev[sizeof(data.rev)+1];
++    strtcpy(vendor, data.vendor, sizeof(vendor));
++    nullTrailingSpace(vendor);
++    strtcpy(product, data.product, sizeof(product));
++    nullTrailingSpace(product);
++    strtcpy(rev, data.rev, sizeof(rev));
++    nullTrailingSpace(rev);
++    *pdt = data.pdt & 0x1f;
++    int removable = !!(data.removable & 0x80);
++    dprintf(1, "%s vendor='%s' product='%s' rev='%s' type=%d removable=%d\n"
++            , s, vendor, product, rev, *pdt, removable);
++    drive->removable = removable;
++
++    if (*pdt == SCSI_TYPE_CDROM) {
++        drive->blksize = CDROM_SECTOR_SIZE;
++        drive->sectors = (u64)-1;
++
++        *desc = znprintf(MAXDESCSIZE, "DVD/CD [%s Drive %s %s %s]"
++                              , s, vendor, product, rev);
++        return 0;
++    }
++
++    ret = scsi_is_ready(&dop);
++    if (ret) {
++        dprintf(1, "scsi_is_ready returned %d\n", ret);
++        return ret;
++    }
++
++    struct cdbres_read_capacity capdata;
++    ret = cdb_read_capacity(&dop, &capdata);
++    if (ret)
++        return ret;
++
++    // READ CAPACITY returns the address of the last block.
++    // We do not bother with READ CAPACITY(16) because BIOS does not support
++    // 64-bit LBA anyway.
++    drive->blksize = ntohl(capdata.blksize);
++    drive->sectors = (u64)ntohl(capdata.sectors) + 1;
++    dprintf(1, "%s blksize=%d sectors=%d\n"
++            , s, drive->blksize, (unsigned)drive->sectors);
++
++    *desc = znprintf(MAXDESCSIZE, "%s Drive %s %s %s"
++                      , s, vendor, product, rev);
++    return 0;
++}
++
+ int
+ cdb_get_inquiry(struct disk_op_s *op, struct cdbres_inquiry *data)
+ {
+diff --git a/src/blockcmd.h b/src/blockcmd.h
+index 106a529..13ae991 100644
+--- a/src/blockcmd.h
++++ b/src/blockcmd.h
+@@ -81,5 +81,6 @@ int cdb_read(struct disk_op_s *op);
+ int cdb_write(struct disk_op_s *op);
+ 
+ int scsi_is_ready(struct disk_op_s *op);
++int scsi_init_drive(struct drive_s *drive, const char *s, int *pdt, char **desc);
+ 
+ #endif // blockcmd.h
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index 6e47c16..72ad15b 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -213,54 +213,17 @@ usb_msc_init(struct usb_pipe *pipe
+     if (!udrive_g->bulkin || !udrive_g->bulkout)
+         goto fail;
+ 
+-    // Validate drive and find block size and sector count.
+-    struct disk_op_s dop;
+-    memset(&dop, 0, sizeof(dop));
+-    dop.drive_g = &udrive_g->drive;
+-    struct cdbres_inquiry data;
+-    int ret = cdb_get_inquiry(&dop, &data);
++    int ret, pdt;
++    char *desc = NULL;
++    ret = scsi_init_drive(&udrive_g->drive, "USB MSC", &pdt, &desc);
+     if (ret)
+         goto fail;
+-    char vendor[sizeof(data.vendor)+1], product[sizeof(data.product)+1];
+-    char rev[sizeof(data.rev)+1];
+-    strtcpy(vendor, data.vendor, sizeof(vendor));
+-    nullTrailingSpace(vendor);
+-    strtcpy(product, data.product, sizeof(product));
+-    nullTrailingSpace(product);
+-    strtcpy(rev, data.rev, sizeof(rev));
+-    nullTrailingSpace(rev);
+-    int pdt = data.pdt & 0x1f;
+-    int removable = !!(data.removable & 0x80);
+-    dprintf(1, "USB MSC vendor='%s' product='%s' rev='%s' type=%d removable=%d\n"
+-            , vendor, product, rev, pdt, removable);
+-    udrive_g->drive.removable = removable;
+-
+-    if (pdt == SCSI_TYPE_CDROM) {
+-        char *desc = znprintf(MAXDESCSIZE, "DVD/CD [USB Drive %s %s %s]"
+-                              , vendor, product, rev);
+-        ret = setup_drive_cdrom(&udrive_g->drive, desc);
+-    } else {
+-        ret = scsi_is_ready(&dop);
+-        if (ret) {
+-            dprintf(1, "scsi_is_ready returned %d\n", ret);
+-            return ret;
+-        }
+-
+-        struct cdbres_read_capacity capdata;
+-        ret = cdb_read_capacity(&dop, &capdata);
+-        if (ret)
+-            return ret;
+ 
+-        // READ CAPACITY returns the address of the last block
+-        udrive_g->drive.blksize = ntohl(capdata.blksize);
+-        udrive_g->drive.sectors = ntohl(capdata.sectors) + 1;
+-        dprintf(1, "USB MSC blksize=%d sectors=%d\n",
+-                udrive_g->drive.blksize, (int)udrive_g->drive.sectors);
+-
+-        char *desc = znprintf(MAXDESCSIZE, "USB Drive %s %s %s"
+-                              , vendor, product, rev);
++    if (pdt == SCSI_TYPE_CDROM)
++        ret = setup_drive_cdrom(&udrive_g->drive, desc);
++    else
+         ret = setup_drive_hd(&udrive_g->drive, desc);
+-    }
++
+     if (ret)
+         goto fail;
+ 
+-- 
+1.7.7.6
+

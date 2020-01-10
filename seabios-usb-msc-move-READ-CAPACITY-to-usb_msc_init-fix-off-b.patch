@@ -1,0 +1,99 @@
+From 68ed03c80898dcbcebc7050dd94075310bc7dfe0 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:35:59 +0100
+Subject: [PATCH 08/22] usb-msc: move READ CAPACITY to usb_msc_init, fix
+ off-by-one
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-9-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36982
+O-Subject: [RHEL6.3 PATCH seabios 08/22] usb-msc: move READ CAPACITY to usb_msc_init, fix off-by-one
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+Only leave the bootprio code in setup_drive_hd, like in setup_drive_cdrom.
+This is a preparatory step; later, the SCSI code in usb_msc_init will
+become entirely generic.
+
+Also, the returned number of sectors is off by one.  This will become
+more important when CHS translation is added later.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from cb864b352568e091d8e39eb5c06fe2d045511200)
+---
+ src/usb-msc.c |   30 ++++++++++++++----------------
+ 1 files changed, 14 insertions(+), 16 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/usb-msc.c |   30 ++++++++++++++----------------
+ 1 files changed, 14 insertions(+), 16 deletions(-)
+
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index 52fe894..961a2b4 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -150,7 +150,6 @@ process_usb_op(struct disk_op_s *op)
+ static int
+ setup_drive_cdrom(struct disk_op_s *op, char *desc)
+ {
+-    op->drive_g->blksize = CDROM_SECTOR_SIZE;
+     op->drive_g->sectors = (u64)-1;
+     struct usb_pipe *pipe = container_of(
+         op->drive_g, struct usbdrive_s, drive)->bulkout;
+@@ -162,29 +161,16 @@ setup_drive_cdrom(struct disk_op_s *op, char *desc)
+ static int
+ setup_drive_hd(struct disk_op_s *op, char *desc)
+ {
+-    struct cdbres_read_capacity info;
+-    int ret = cdb_read_capacity(op, &info);
+-    if (ret)
+-        return ret;
+-    // XXX - retry for some timeout?
+-
+-    u32 blksize = ntohl(info.blksize), sectors = ntohl(info.sectors);
+-    if (blksize != DISK_SECTOR_SIZE) {
+-        if (blksize == CDROM_SECTOR_SIZE)
+-            return setup_drive_cdrom(op, desc);
+-        dprintf(1, "Unsupported USB MSC block size %d\n", blksize);
++    if (op->drive_g->blksize != DISK_SECTOR_SIZE) {
++        dprintf(1, "Unsupported USB MSC block size %d\n", op->drive_g->blksize);
+         return -1;
+     }
+-    op->drive_g->blksize = blksize;
+-    op->drive_g->sectors = sectors;
+-    dprintf(1, "USB MSC blksize=%d sectors=%d\n", blksize, sectors);
+ 
+     // Register with bcv system.
+     struct usb_pipe *pipe = container_of(
+         op->drive_g, struct usbdrive_s, drive)->bulkout;
+     int prio = bootprio_find_usb(pipe->cntl->bdf, pipe->path);
+     boot_add_hd(op->drive_g, desc, prio);
+-
+     return 0;
+ }
+ 
+@@ -252,6 +238,18 @@ usb_msc_init(struct usb_pipe *pipe
+                               , vendor, product, rev);
+         ret = setup_drive_cdrom(&dop, desc);
+     } else {
++        struct cdbres_read_capacity capdata;
++        ret = cdb_read_capacity(&dop, &capdata);
++        if (ret)
++            return ret;
++        // XXX - retry for some timeout?
++
++        // READ CAPACITY returns the address of the last block
++        udrive_g->drive.blksize = ntohl(capdata.blksize);
++        udrive_g->drive.sectors = ntohl(capdata.sectors) + 1;
++        dprintf(1, "USB MSC blksize=%d sectors=%d\n",
++                udrive_g->drive.blksize, (int)udrive_g->drive.sectors);
++
+         char *desc = znprintf(MAXDESCSIZE, "USB Drive %s %s %s"
+                               , vendor, product, rev);
+         ret = setup_drive_hd(&dop, desc);
+-- 
+1.7.7.6
+

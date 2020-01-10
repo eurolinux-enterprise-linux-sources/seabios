@@ -1,0 +1,127 @@
+From e3c35abfcc73d580ccf6b2fb5b2d861f8c25a51a Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:04 +0100
+Subject: [PATCH 13/22] cdrom: use TEST UNIT READY to detect ready medium
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-14-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36987
+O-Subject: [RHEL6.3 PATCH seabios 13/22] cdrom: use TEST UNIT READY to detect ready medium
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+The READ CAPACITY output is not used except for some debugging messages.
+In the future, we will use this code for USB sticks too, but those
+already send READ CAPACITY.  To avoid code duplication, switch to TEST
+UNIT READY for this task.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from 0082374caae8b8f0e235034d3ee2faaa48274d42)
+---
+ src/blockcmd.c |   12 ++++++++++++
+ src/blockcmd.h |    6 ++++--
+ src/cdrom.c    |   16 +++-------------
+ 3 files changed, 19 insertions(+), 15 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/blockcmd.c |   12 ++++++++++++
+ src/blockcmd.h |    6 ++++--
+ src/cdrom.c    |   16 +++-------------
+ 3 files changed, 19 insertions(+), 15 deletions(-)
+
+diff --git a/src/blockcmd.c b/src/blockcmd.c
+index 9b37006..bb08f1f 100644
+--- a/src/blockcmd.c
++++ b/src/blockcmd.c
+@@ -53,6 +53,18 @@ cdb_get_sense(struct disk_op_s *op, struct cdbres_request_sense *data)
+     return cdb_cmd_data(op, &cmd, sizeof(*data));
+ }
+ 
++// Test unit ready
++int
++cdb_test_unit_ready(struct disk_op_s *op)
++{
++    struct cdb_request_sense cmd;
++    memset(&cmd, 0, sizeof(cmd));
++    cmd.command = CDB_CMD_TEST_UNIT_READY;
++    op->count = 0;
++    op->buf_fl = NULL;
++    return cdb_cmd_data(op, &cmd, 0);
++}
++
+ // Request capacity
+ int
+ cdb_read_capacity(struct disk_op_s *op, struct cdbres_read_capacity *data)
+diff --git a/src/blockcmd.h b/src/blockcmd.h
+index b3e3a64..6923e4c 100644
+--- a/src/blockcmd.h
++++ b/src/blockcmd.h
+@@ -32,8 +32,9 @@ struct cdbres_read_capacity {
+     u32 blksize;
+ } PACKED;
+ 
+-#define CDB_CMD_INQUIRY 0x12
+-#define CDB_CMD_REQUEST_SENSE 0x03
++#define CDB_CMD_TEST_UNIT_READY  0x00
++#define CDB_CMD_INQUIRY          0x12
++#define CDB_CMD_REQUEST_SENSE    0x03
+ 
+ struct cdb_request_sense {
+     u8 command;
+@@ -73,6 +74,7 @@ struct cdbres_inquiry {
+ // blockcmd.c
+ int cdb_get_inquiry(struct disk_op_s *op, struct cdbres_inquiry *data);
+ int cdb_get_sense(struct disk_op_s *op, struct cdbres_request_sense *data);
++int cdb_test_unit_ready(struct disk_op_s *op);
+ int cdb_read_capacity(struct disk_op_s *op, struct cdbres_read_capacity *data);
+ int cdb_inquiry(struct disk_op_s *op, struct cdbres_inquiry *data);
+ int cdb_read(struct disk_op_s *op);
+diff --git a/src/cdrom.c b/src/cdrom.c
+index 1f513df..c98e0e5 100644
+--- a/src/cdrom.c
++++ b/src/cdrom.c
+@@ -193,19 +193,18 @@ atapi_is_ready(struct disk_op_s *op)
+ {
+     dprintf(6, "atapi_is_ready (drive=%p)\n", op->drive_g);
+ 
+-    /* Retry READ CAPACITY for 5 seconds unless MEDIUM NOT PRESENT is
++    /* Retry TEST UNIT READY for 5 seconds unless MEDIUM NOT PRESENT is
+      * reported by the device.  If the device reports "IN PROGRESS",
+      * 30 seconds is added. */
+-    struct cdbres_read_capacity info;
+     int in_progress = 0;
+     u64 end = calc_future_tsc(5000);
+     for (;;) {
+         if (check_tsc(end)) {
+-            dprintf(1, "read capacity failed\n");
++            dprintf(1, "test unit ready failed\n");
+             return -1;
+         }
+ 
+-        int ret = cdb_read_capacity(op, &info);
++        int ret = cdb_test_unit_ready(op);
+         if (!ret)
+             // Success
+             break;
+@@ -230,15 +229,6 @@ atapi_is_ready(struct disk_op_s *op)
+             in_progress = 1;
+         }
+     }
+-
+-    u32 blksize = ntohl(info.blksize), sectors = ntohl(info.sectors);
+-    if (blksize != GET_GLOBAL(op->drive_g->blksize)) {
+-        printf("Unsupported sector size %u\n", blksize);
+-        return -1;
+-    }
+-
+-    dprintf(6, "sectors=%u\n", sectors);
+-    printf("%dMB medium detected\n", sectors>>(20-11));
+     return 0;
+ }
+ 
+-- 
+1.7.7.6
+

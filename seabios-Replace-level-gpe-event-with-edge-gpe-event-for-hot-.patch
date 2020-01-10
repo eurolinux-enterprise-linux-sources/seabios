@@ -1,0 +1,89 @@
+From 5f1f84690be5b61dd496100f8ff87e5f2dfb6d1e Mon Sep 17 00:00:00 2001
+Message-Id: <5f1f84690be5b61dd496100f8ff87e5f2dfb6d1e.1334070519.git.minovotn@redhat.com>
+From: Igor Mammedov <imammedo@redhat.com>
+Date: Thu, 5 Apr 2012 15:01:26 +0200
+Subject: [PATCH] Replace level gpe event with edge gpe event for hot-plug
+ handlers
+
+RH-Author: Igor Mammedov <imammedo@redhat.com>
+Message-id: <1333638086-24526-1-git-send-email-imammedo@redhat.com>
+Patchwork-id: 39123
+O-Subject: [RHEL6.3 seabios PATCH] Replace level gpe event with edge gpe event for hot-plug handlers
+Bugzilla: 808033
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Michael S. Tsirkin <mst@redhat.com>
+
+BZ#808033
+Upstream: 9c6635bd48d39a1d17d0a73df6e577ef6bd0037c
+
+in current code, pci hot-plug gpe event handler is defined as
+a level one "_L01"
+
+1. hw adds device, sets GPE.1 bit and sends SCI
+2. OSPM gets SCI, reads GPE00.sts and masks GPE.1 bit in GPE00.en
+3. OSPM executes _L01
+4. hw adds second device and sets GPE.1 bit but SCI is not asserted
+since GPE00.en masks event
+5. OSPM resets GPE.1 bit in GPE00.sts and umasks it in GPE00.en
+
+as result event for step 4 is lost because step 5 clears it and OS
+will not see added second device.
+
+ACPI 50 spec: 5.6.4 General-Purpose Event Handling
+defines GPE event handling as following:
+
+1. Disables the interrupt source (GPEx_BLK EN bit).
+2. If an edge event, clears the status bit.
+3. Performs one of the following:
+* Dispatches to an ACPI-aware device driver.
+* Queues the matching control method for execution.
+* Manages a wake event using device _PRW objects.
+4. If a level event, clears the status bit.
+5. Enables the interrupt source.
+
+Switching from level to edge event handler reduces chances to
+hit race window.
+
+Same applies to cpu-hotplug, so switch it to edge handler as well.
+
+Tested with RHEL6, 3.3.+ kernel, winxp, and w2008r2, and I wasn't
+able to trigger race after using edge event handler.
+
+Credits to Michael S. Tsirkin for idea.
+
+Signed-off-by: Igor Mammedov <imammedo@redhat.com>
+---
+ src/acpi-dsdt.dsl |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi-dsdt.dsl |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index 62fa26a..61dc7d4 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -817,7 +817,7 @@ DefinitionBlock (
+                 Notify(\_SB.PCI0.S##nr, 3)                        \
+             }
+ 
+-        Method(_L01) {
++        Method(_E01) {
+             gen_pci_hotplug(1)
+             gen_pci_hotplug(2)
+             gen_pci_hotplug(3)
+@@ -853,7 +853,7 @@ DefinitionBlock (
+             Return (0x01)
+ 
+         }
+-        Method(_L02) {
++        Method(_E02) {
+             // CPU hotplug event
+             Return(\_SB.PRSC())
+         }
+-- 
+1.7.7.6
+

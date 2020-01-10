@@ -1,0 +1,45 @@
+From feaf57c2ea28fca01d414599d31ab9c16b7d070f Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:10 +0100
+Subject: [PATCH 19/22] virtio-pci: include pci.h and pci_regs.h
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-20-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36978
+O-Subject: [RHEL6.3 PATCH seabios 19/22] virtio-pci: include pci.h and pci_regs.h
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+From: Sebastian Herbszt <herbszt@gmx.de>
+
+Include pci.h and pci_regs.h.
+
+Signed-off-by: Sebastian Herbszt <herbszt@gmx.de>
+(cherry-picked from 70451b69250746f14100bd3c59692150111a096d)
+---
+ src/virtio-pci.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/virtio-pci.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/src/virtio-pci.c b/src/virtio-pci.c
+index db19e97..2ac0e70 100644
+--- a/src/virtio-pci.c
++++ b/src/virtio-pci.c
+@@ -19,6 +19,8 @@
+ #include "virtio-pci.h"
+ #include "config.h" // CONFIG_DEBUG_LEVEL
+ #include "util.h" // dprintf
++#include "pci.h" // pci_config_readl
++#include "pci_regs.h" // PCI_BASE_ADDRESS_0
+ 
+ int vp_find_vq(unsigned int ioaddr, int queue_index,
+                struct vring_virtqueue *vq)
+-- 
+1.7.7.6
+

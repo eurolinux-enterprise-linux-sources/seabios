@@ -1,0 +1,58 @@
+From cc49702de3a8e10cb131e879764898f10da602ea Mon Sep 17 00:00:00 2001
+From: Eduardo Habkost <ehabkost@redhat.com>
+Date: Tue, 10 Apr 2012 14:03:13 -0300
+Subject: [PATCH] Revert "enable S3/S4"
+
+RH-Author: Eduardo Habkost <ehabkost@redhat.com>
+Message-id: <1334066594-4805-2-git-send-email-ehabkost@redhat.com>
+Patchwork-id: 39152
+O-Subject: [seabios 6.3 PATCH 1/2] Revert "enable S3/S4"
+Bugzilla: 809797
+RH-Acked-by: Daniel P. Berrange <berrange@redhat.com>
+RH-Acked-by: Ademar de Souza Reis Jr. <areis@redhat.com>
+RH-Acked-by: Amit Shah <amit.shah@redhat.com>
+
+From: Eduardo Habkost <ehabkost@raisama.net>
+
+Bugzilla: 809797
+Related-bugzilla: 761586
+Upstream status: not included. RHEL7 regression tracked at:
+    https://bugzilla.redhat.com/show_bug.cgi?id=810995
+
+This reverts commit 55aeb905225dbe6fcfece8b707521b34fedc9b2e, added for
+bz#761586. We need the build-time #define to build the two binaries (one
+with S3/S4 support, one without it).
+
+Signed-off-by: Eduardo Habkost <ehabkost@redhat.com>
+---
+ src/acpi-dsdt.dsl |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+Signed-off-by: Eduardo Habkost <ehabkost@raisama.net>
+---
+ src/acpi-dsdt.dsl |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index 61dc7d4..1af39b1 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -703,6 +703,7 @@ DefinitionBlock (
+         }
+     }
+ 
++#ifdef DSDT_PM
+     /*
+      * S3 (suspend-to-ram), S4 (suspend-to-disk) and S5 (power-off) type codes:
+      * must match piix4 emulation.
+@@ -721,6 +722,7 @@ DefinitionBlock (
+         Zero,  /* reserved */
+         Zero   /* reserved */
+     })
++#endif
+     Name (\_S5, Package (0x04)
+     {
+         Zero,  /* PM1a_CNT.SLP_TYP */
+-- 
+1.7.3.2
+

@@ -1,0 +1,53 @@
+From db47d659e0f2ad2f7e705f5b4bdeca3a490a316d Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:35:54 +0100
+Subject: [PATCH 03/22] usb-uhci: Be sure to wrap pipe->iobase in
+ GET_FLATPTR().
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-4-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36971
+O-Subject: [RHEL6.3 PATCH seabios 03/22] usb-uhci: Be sure to wrap pipe->iobase in GET_FLATPTR().
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+(cherry-picked from 08589ac092e7db9fed1e533f7d5f713af5e9efda)
+---
+ src/usb-uhci.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/usb-uhci.c |    7 ++++---
+ 1 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/usb-uhci.c b/src/usb-uhci.c
+index 8bdbecd..d0e594a 100644
+--- a/src/usb-uhci.c
++++ b/src/usb-uhci.c
+@@ -243,13 +243,14 @@ wait_pipe(struct uhci_pipe *pipe, int timeout)
+             return 0;
+         if (check_tsc(end)) {
+             warn_timeout();
++            u16 iobase = GET_FLATPTR(pipe->iobase);
+             struct uhci_td *td = (void*)(el_link & ~UHCI_PTR_BITS);
+             dprintf(1, "Timeout on wait_pipe %p (td=%p s=%x c=%x/%x)\n"
+                     , pipe, (void*)el_link, GET_FLATPTR(td->status)
+-                    , inw(pipe->iobase + USBCMD)
+-                    , inw(pipe->iobase + USBSTS));
++                    , inw(iobase + USBCMD)
++                    , inw(iobase + USBSTS));
+             SET_FLATPTR(pipe->qh.element, UHCI_PTR_TERM);
+-            uhci_waittick(pipe->iobase);
++            uhci_waittick(iobase);
+             return -1;
+         }
+         yield();
+-- 
+1.7.7.6
+

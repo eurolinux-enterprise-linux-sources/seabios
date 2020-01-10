@@ -1,0 +1,65 @@
+From abd6587d1efd34846507eaa7be01f1c098b807e9 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Wed, 21 Mar 2012 09:23:10 +0100
+Subject: [PATCH 4/4] ata: send TEST UNIT READY correctly
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1332321790-12045-5-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 38770
+O-Subject: [RHEL6.3 PATCH seabios 4/4] ata: send TEST UNIT READY correctly
+Bugzilla: 801293
+RH-Acked-by: Hans de Goede <hdegoede@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+
+The ATAPI driver does not need to support writes, but it does needs to
+avoid the PIO transfer and DRQ check when TEST UNIT READY is sent.
+Since TEST UNIT READY has no payload, checking for not busy is enough.
+
+This fixes a timeout when booting from CD/DVD, which fellaw@gmx.net
+reported to cause boot failures.  (I could not reproduce the boot
+failures).
+
+Upstream: 39d59895aa20caa9fa48b98b9a6e2b4d234a01c4
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+---
+ src/ata.c |   14 ++++++++------
+ 1 files changed, 8 insertions(+), 6 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/ata.c |   14 ++++++++------
+ 1 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/ata.c b/src/ata.c
+index b33dcb6..752db4a 100644
+--- a/src/ata.c
++++ b/src/ata.c
+@@ -642,13 +642,15 @@ atapi_cmd_data(struct disk_op_s *op, void *cdbcmd, u16 blocksize)
+         ret = -2;
+         goto fail;
+     }
+-    if (!(status & ATA_CB_STAT_DRQ)) {
+-        dprintf(6, "send_atapi_cmd : DRQ not set (status %02x)\n", status);
+-        ret = -3;
+-        goto fail;
+-    }
++    if (blocksize) {
++        if (!(status & ATA_CB_STAT_DRQ)) {
++            dprintf(6, "send_atapi_cmd : DRQ not set (status %02x)\n", status);
++            ret = -3;
++            goto fail;
++        }
+ 
+-    ret = ata_pio_transfer(op, 0, blocksize);
++        ret = ata_pio_transfer(op, 0, blocksize);
++    }
+ 
+ fail:
+     // Enable interrupts
+-- 
+1.7.7.6
+

@@ -1,0 +1,166 @@
+From 17fcd356e79b29902dcc67df6957f76a2a9d78af Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:09 +0100
+Subject: [PATCH 18/22] always specify virtio-blk rather than virtio
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-19-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36985
+O-Subject: [RHEL6.3 PATCH seabios 18/22] always specify virtio-blk rather than virtio
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+Avoid ambiguity when virtio-scsi will be introduced.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from 0e7fb5fdad211ab608a7a4e1b0cc32426fc617a0)
+
+Conflicts:
+	src/Kconfig (absent in RHEL)
+	src/block.c (no AHCI)
+	src/disk.h (no AHCI)
+---
+ src/block.c      |    6 +++---
+ src/config.h     |    2 +-
+ src/disk.c       |    4 ++--
+ src/disk.h       |   16 ++++++++--------
+ src/virtio-blk.c |    4 ++--
+ src/virtio-blk.h |    2 +-
+ 6 files changed, 17 insertions(+), 17 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/block.c      |    6 +++---
+ src/config.h     |    2 +-
+ src/disk.c       |    4 ++--
+ src/disk.h       |   16 ++++++++--------
+ src/virtio-blk.c |    4 ++--
+ src/virtio-blk.h |    2 +-
+ 6 files changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/src/block.c b/src/block.c
+index c830259..070c9c7 100644
+--- a/src/block.c
++++ b/src/block.c
+@@ -10,7 +10,7 @@
+ #include "cmos.h" // inb_cmos
+ #include "util.h" // dprintf
+ #include "ata.h" // process_ata_op
+-#include "virtio-blk.h" // process_virtio_op
++#include "virtio-blk.h" // process_virtio_blk_op
+ #include "blockcmd.h" // cdb_*
+ 
+ u8 FloppyCount VAR16VISIBLE;
+@@ -300,8 +300,8 @@ process_op(struct disk_op_s *op)
+         return process_ramdisk_op(op);
+     case DTYPE_CDEMU:
+         return process_cdemu_op(op);
+-    case DTYPE_VIRTIO:
+-	return process_virtio_op(op);
++    case DTYPE_VIRTIO_BLK:
++        return process_virtio_blk_op(op);
+     case DTYPE_USB:
+         return process_scsi_op(op);
+     default:
+diff --git a/src/config.h b/src/config.h
+index 7fedd72..d4bec4b 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -146,7 +146,7 @@
+ #define CONFIG_SUBMODEL_ID   0x00
+ #define CONFIG_BIOS_REVISION 0x01
+ 
+-// Support boot from virtio storage
++// Support boot from virtio-blk storage
+ #define CONFIG_VIRTIO_BLK 1
+ 
+ // Various memory addresses used by the code.
+diff --git a/src/disk.c b/src/disk.c
+index 8f7c61f..f2c6621 100644
+--- a/src/disk.c
++++ b/src/disk.c
+@@ -546,7 +546,7 @@ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+     SET_INT13DPT(regs, blksize, blksize);
+ 
+     if (size < 30 ||
+-        (type != DTYPE_ATA && type != DTYPE_ATAPI && type != DTYPE_VIRTIO)) {
++        (type != DTYPE_ATA && type != DTYPE_ATAPI && type != DTYPE_VIRTIO_BLK)) {
+         disk_ret(regs, DISK_RET_SUCCESS);
+         return;
+     }
+@@ -651,7 +651,7 @@ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+         SET_INT13DPT(regs, iface_path, iobase1);
+     }
+ 
+-    if (type != DTYPE_VIRTIO) {
++    if (type != DTYPE_VIRTIO_BLK) {
+         SET_INT13DPT(regs, iface_type[0], 'A');
+         SET_INT13DPT(regs, iface_type[1], 'T');
+         SET_INT13DPT(regs, iface_type[2], 'A');
+diff --git a/src/disk.h b/src/disk.h
+index 94dec44..3df1f06 100644
+--- a/src/disk.h
++++ b/src/disk.h
+@@ -198,14 +198,14 @@ struct drive_s {
+ #define DISK_SECTOR_SIZE  512
+ #define CDROM_SECTOR_SIZE 2048
+ 
+-#define DTYPE_NONE     0x00
+-#define DTYPE_FLOPPY   0x01
+-#define DTYPE_ATA      0x02
+-#define DTYPE_ATAPI    0x03
+-#define DTYPE_RAMDISK  0x04
+-#define DTYPE_CDEMU    0x05
+-#define DTYPE_USB      0x06
+-#define DTYPE_VIRTIO   0x07
++#define DTYPE_NONE         0x00
++#define DTYPE_FLOPPY       0x01
++#define DTYPE_ATA          0x02
++#define DTYPE_ATAPI        0x03
++#define DTYPE_RAMDISK      0x04
++#define DTYPE_CDEMU        0x05
++#define DTYPE_USB          0x06
++#define DTYPE_VIRTIO_BLK   0x07
+ 
+ #define MAXDESCSIZE 80
+ 
+diff --git a/src/virtio-blk.c b/src/virtio-blk.c
+index bd9e2ad..3ea548b 100644
+--- a/src/virtio-blk.c
++++ b/src/virtio-blk.c
+@@ -75,7 +75,7 @@ virtio_blk_op(struct disk_op_s *op, int write)
+ }
+ 
+ int
+-process_virtio_op(struct disk_op_s *op)
++process_virtio_blk_op(struct disk_op_s *op)
+ {
+     if (! CONFIG_VIRTIO_BLK || CONFIG_COREBOOT)
+         return 0;
+@@ -109,7 +109,7 @@ init_virtio_blk(u16 bdf)
+     }
+     memset(vdrive_g, 0, sizeof(*vdrive_g));
+     memset(vq, 0, sizeof(*vq));
+-    vdrive_g->drive.type = DTYPE_VIRTIO;
++    vdrive_g->drive.type = DTYPE_VIRTIO_BLK;
+     vdrive_g->drive.cntl_id = bdf;
+     vdrive_g->vq = vq;
+ 
+diff --git a/src/virtio-blk.h b/src/virtio-blk.h
+index 7243704..0825f09 100644
+--- a/src/virtio-blk.h
++++ b/src/virtio-blk.h
+@@ -37,7 +37,7 @@ struct virtio_blk_outhdr {
+ #define VIRTIO_BLK_S_UNSUPP	2
+ 
+ struct disk_op_s;
+-int process_virtio_op(struct disk_op_s *op);
++int process_virtio_blk_op(struct disk_op_s *op);
+ void virtio_blk_setup(void);
+ 
+ #endif /* _VIRTIO_BLK_H */
+-- 
+1.7.7.6
+

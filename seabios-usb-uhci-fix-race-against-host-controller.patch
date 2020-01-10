@@ -1,0 +1,78 @@
+From 4772bb04a4db26abcfe0b1a0b36c1a8f32a77081 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:35:55 +0100
+Subject: [PATCH 04/22] usb-uhci: fix race against host controller
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-5-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36984
+O-Subject: [RHEL6.3 PATCH seabios 04/22] usb-uhci: fix race against host controller
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+While processing a frame, the host controller will write to the queue
+head's element link field.  The following sequence could then happen
+when two consecutive sends occur to the same pipe.
+
+    controller                      SeaBIOS
+    ---------------------------------------------------------------------
+                                    td->link = UHCI_PTR_TERM;
+                                    td->ctrl |= TD_CTRL_ACTIVE;
+    read TD from memory
+                                    wait_td(td);
+    td->ctrl &= ~TD_CTRL_ACTIVE;
+    write back td->ctrl
+                                    exit usb_send_bulk
+                                    restart usb_send_bulk
+                                    pipe->qh.element = &tds;
+    pipe->qh.element = td->link;    ... go on and set up the first td ...
+    write back pipe->qh.element
+                                    td->ctrl |= TD_CTRL_ACTIVE;
+
+Once the host controller has written UHCI_PTR_TERM to the element link,
+subsequent tds would never be processed.  This is surprisingly frequent
+when the two consecutive sends are in the OUT direction (and just as
+surprisingly, it seems like it never happens in the IN direction).
+
+To fix this, at the end of the processing do not wait for each single
+TD to become inactive, but for the host controller to invalidate the
+element link (which implies it's done with all TDs).
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from 13fcbb9d8c0a3919aafaf839ac392c049c726229)
+---
+ src/usb-uhci.c |   10 +---------
+ 1 files changed, 1 insertions(+), 9 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/usb-uhci.c |   10 +---------
+ 1 files changed, 1 insertions(+), 9 deletions(-)
+
+diff --git a/src/usb-uhci.c b/src/usb-uhci.c
+index d0e594a..d97b10f 100644
+--- a/src/usb-uhci.c
++++ b/src/usb-uhci.c
+@@ -479,16 +479,8 @@ uhci_send_bulk(struct usb_pipe *p, int dir, void *data, int datasize)
+         data += transfer;
+         datasize -= transfer;
+     }
+-    int i;
+-    for (i=0; i<STACKTDS; i++) {
+-        struct uhci_td *td = &tds[tdpos++ % STACKTDS];
+-        int ret = wait_td(td);
+-        if (ret)
+-            goto fail;
+-    }
+-
+     SET_FLATPTR(pipe->toggle, !!toggle);
+-    return 0;
++    return wait_pipe(pipe, 5000);
+ fail:
+     dprintf(1, "uhci_send_bulk failed\n");
+     SET_FLATPTR(pipe->qh.element, UHCI_PTR_TERM);
+-- 
+1.7.7.6
+

@@ -3,7 +3,7 @@
 
 Name:           seabios
 Version:        0.6.1.2
-%define pkgrelease 8
+%define pkgrelease 19
 Release:        %{pkgrelease}%{?dist}
 Summary:        Open-source legacy BIOS implementation
 
@@ -103,6 +103,75 @@ Patch43: seabios-add-40-48-bit-RAM-range-to-seabios.patch
 Patch44: seabios-Add-Local-APIC-NMI-Structure-to-ACPI-MADT-wa.patch
 # For bz#750191 - Wrong LINT1/NMI ACPI and mptable descriptors
 Patch45: seabios-fix-mptable-nmi-entry-was-Re-Qemu-devel-PATC.patch
+# For bz#771946 - mask interrupts on S3 resume
+Patch46: seabios-mask-interrupts-on-S3-resume.patch
+# For bz#786142 - Windows guest shows HPET device, but qemu has none.
+Patch47: seabios-Remove-HPET-from-DSDT.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch48: seabios-usb-fix-boot-paths.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch49: seabios-usb-uhci-reorganize-wait_qh-into-wait_pipe.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch50: seabios-usb-uhci-Be-sure-to-wrap-pipe-iobase-in-GET_FLATPTR.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch51: seabios-usb-uhci-fix-race-against-host-controller.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch52: seabios-usb-ehci-Fix-races-with-controller-on-updates-to-QH.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch53: seabios-usb-msc-support-commands-without-payload.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch54: seabios-usb-msc-add-usb_msc_send.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch55: seabios-usb-msc-move-READ-CAPACITY-to-usb_msc_init-fix-off-b.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch56: seabios-usb-msc-pass-drive-to-setup_drive_.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch57: seabios-usb-msc-support-WRITE-commands.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch58: seabios-Extract-space-trimming-code-from-ATA-and-use-in-USB-.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch59: seabios-usb-msc-rename-INQUIRY-types.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch60: seabios-cdrom-use-TEST-UNIT-READY-to-detect-ready-medium.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch61: seabios-usb-msc-go-through-TEST-UNIT-READY-for-hard-disks.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch62: seabios-usb-msc-move-common-scsi-code-to-blockcmd.c.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch63: seabios-usb-msc-move-cdb-dispatch-to-block.c.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch64: seabios-scsi-get-physical-chs-geometry-from-mode-page-0x04.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch65: seabios-always-specify-virtio-blk-rather-than-virtio.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch66: seabios-virtio-pci-include-pci.h-and-pci_regs.h.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch67: seabios-virtio-pci-introduce-vp_init_simple.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch68: seabios-virtio-pci-allocate-vq-in-vp_find_vq.patch
+# For bz#782028 - [RFE] virtio-scsi boot support in SeaBIOS
+Patch69: seabios-add-virtio-scsi-driver.patch
+# For bz#761586 - Patch bios to restore S3/S4
+Patch70: seabios-enable-S3-S4.patch
+# For bz#802033 - kvm guest hangs on reboot after cpu-hotplug
+# For bz#805168 - seabios should not spin on cpu if started cpu count != cmos value at 0x5f
+Patch71: seabios-Halt-if-number-of-started-cpus-are-more-then-expecte.patch
+# For bz#804933 - RTC wake up does not work with windows guests
+Patch72: seabios-Drop-FIX_RTC-flag-from-FADT.patch
+# For bz#801293 - fix boot from host or redirected USB pen drives
+Patch73: seabios-scsi-do-not-send-MODE-SENSE-except-to-QEMU-disks.patch
+# For bz#801293 - fix boot from host or redirected USB pen drives
+Patch74: seabios-Use-OUT-mode-for-all-zero-byte-scsi-transfers.patch
+# For bz#801293 - fix boot from host or redirected USB pen drives
+Patch75: seabios-virtio-scsi-Fix-virtio-scsi-after-cdb_is_read-change.patch
+# For bz#801293 - fix boot from host or redirected USB pen drives
+Patch76: seabios-ata-send-TEST-UNIT-READY-correctly.patch
+# For bz#808033 - kvm guest doesn't see all hotplugged vcpus when 'virsh setvcpus 64 --live ' or hot-plugged devices when they added fast enough
+Patch77: seabios-Replace-level-gpe-event-with-edge-gpe-event-for-hot-.patch
+# For bz#809797 - Create a seabios binary that supports s3/s4
+Patch78: seabios-Revert-enable-S3-S4.patch
+# For bz#810471 - boot fails while starting guest with sockets>62 and cores=1 and threads=1 option  and 10 virtio disks
+Patch79: seabios-increase-f-segment-memory-pool.patch
 
 %description
 SeaBIOS is an open-source legacy BIOS implementation which can be used as
@@ -157,16 +226,56 @@ that a typical x86 proprietary BIOS implements.
 %patch43 -p1
 %patch44 -p1
 %patch45 -p1
-
+%patch46 -p1
+%patch47 -p1
+%patch48 -p1
+%patch49 -p1
+%patch50 -p1
+%patch51 -p1
+%patch52 -p1
+%patch53 -p1
+%patch54 -p1
+%patch55 -p1
+%patch56 -p1
+%patch57 -p1
+%patch58 -p1
+%patch59 -p1
+%patch60 -p1
+%patch61 -p1
+%patch62 -p1
+%patch63 -p1
+%patch64 -p1
+%patch65 -p1
+%patch66 -p1
+%patch67 -p1
+%patch68 -p1
+%patch69 -p1
+%patch70 -p1
+%patch71 -p1
+%patch72 -p1
+%patch73 -p1
+%patch74 -p1
+%patch75 -p1
+%patch76 -p1
+%patch77 -p1
+%patch78 -p1
+%patch79 -p1
 
 %build
-make
+mkdir saved-output
+make VERSION="%{name}-%{version}-%{release}-PM" DSDT_CPP_FLAGS=-DDSDT_PM
+cp out/bios.bin saved-output/bios-pm.bin
+make clean
+rm -f src/acpi-dsdt.hex
+make VERSION="%{name}-%{version}-%{release}"
+cp out/bios.bin saved-output/bios-no_pm.bin
 
 
 %install
 rm -rf $RPM_BUILD_ROOT
 mkdir -p $RPM_BUILD_ROOT%{_datadir}/seabios
-install -m 0644 out/bios.bin $RPM_BUILD_ROOT%{_datadir}/seabios
+install -m 0644 saved-output/bios-pm.bin $RPM_BUILD_ROOT%{_datadir}/seabios/bios-pm.bin
+install -m 0644 saved-output/bios-no_pm.bin $RPM_BUILD_ROOT%{_datadir}/seabios/bios.bin
 
 
 %clean
@@ -178,10 +287,93 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{_datadir}/seabios/
 %doc COPYING COPYING.LESSER README TODO
 %{_datadir}/seabios/bios.bin
+%{_datadir}/seabios/bios-pm.bin
 
 
 
 %changelog
+* Wed Apr 18 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-19.el6
+- seabios-increase-f-segment-memory-pool.patch [bz#810471]
+- Resolves: bz#810471
+  (boot fails while starting guest with sockets>62 and cores=1 and threads=1 option  and 10 virtio disks)
+
+* Wed Apr 11 2012 Eduardo Habkost <ehabkost@redhat.com> - seabios-0.6.1.2-18.el6
+- seabios-Revert-enable-S3-S4.patch [bz#809797]
+- add S3/S4 seabios binary [bz#809797]
+- Resolves: bz#809797
+  (Create a seabios binary that supports s3/s4)
+
+* Tue Apr 10 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-17.el6
+- seabios-Replace-level-gpe-event-with-edge-gpe-event-for-hot-.patch [bz#808033]
+- Resolves: bz#808033
+  (kvm guest doesn't see all hotplugged vcpus when 'virsh setvcpus 64 --live ' or hot-plugged devices when they added fast enough)
+
+* Fri Mar 30 2012 Eduardo Habkost <ehabkost@redhat.com> - seabios-0.6.1.2-16.el6
+- Restore seabios-Drop-FIX_RTC-flag-from-FADT.patch [bz#804933]
+- Resolves: bz#804933
+  (RTC wake up does not work with windows guests)
+
+* Thu Mar 22 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-15.el6
+- seabios-scsi-do-not-send-MODE-SENSE-except-to-QEMU-disks.patch [bz#801293]
+- seabios-Use-OUT-mode-for-all-zero-byte-scsi-transfers.patch [bz#801293]
+- seabios-virtio-scsi-Fix-virtio-scsi-after-cdb_is_read-change.patch [bz#801293]
+- seabios-ata-send-TEST-UNIT-READY-correctly.patch [bz#801293]
+- Resolves: bz#801293
+  (fix boot from host or redirected USB pen drives)
+
+* Wed Mar 21 2012 Eduardo Habkost <ehabkost@redhat.com> - seabios-0.6.1.2-14.el6
+- seabios-Halt-if-number-of-started-cpus-are-more-then-expecte.patch [bz#802033 bz#805168]
+- seabios-Drop-FIX_RTC-flag-from-FADT.patch [bz#804933]
+- Resolves: bz#802033
+  (kvm guest hangs on reboot after cpu-hotplug)
+- Resolves: bz#804933
+  (RTC wake up does not work with windows guests)
+- Resolves: bz#805168
+  (seabios should not spin on cpu if started cpu count != cmos value at 0x5f)
+
+* Mon Mar 19 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-13.el6
+- seabios-enable-S3-S4.patch [bz#761586]
+- Resolves: bz#761586
+  (Patch bios to restore S3/S4)
+- Resolves: bz#804603
+  (specfile: Put seabios version into banner)
+
+* Tue Mar 06 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-12.el6
+- seabios-usb-fix-boot-paths.patch [bz#782028]
+- seabios-usb-uhci-reorganize-wait_qh-into-wait_pipe.patch [bz#782028]
+- seabios-usb-uhci-Be-sure-to-wrap-pipe-iobase-in-GET_FLATPTR.patch [bz#782028]
+- seabios-usb-uhci-fix-race-against-host-controller.patch [bz#782028]
+- seabios-usb-ehci-Fix-races-with-controller-on-updates-to-QH.patch [bz#782028]
+- seabios-usb-msc-support-commands-without-payload.patch [bz#782028]
+- seabios-usb-msc-add-usb_msc_send.patch [bz#782028]
+- seabios-usb-msc-move-READ-CAPACITY-to-usb_msc_init-fix-off-b.patch [bz#782028]
+- seabios-usb-msc-pass-drive-to-setup_drive_.patch [bz#782028]
+- seabios-usb-msc-support-WRITE-commands.patch [bz#782028]
+- seabios-Extract-space-trimming-code-from-ATA-and-use-in-USB-.patch [bz#782028]
+- seabios-usb-msc-rename-INQUIRY-types.patch [bz#782028]
+- seabios-cdrom-use-TEST-UNIT-READY-to-detect-ready-medium.patch [bz#782028]
+- seabios-usb-msc-go-through-TEST-UNIT-READY-for-hard-disks.patch [bz#782028]
+- seabios-usb-msc-move-common-scsi-code-to-blockcmd.c.patch [bz#782028]
+- seabios-usb-msc-move-cdb-dispatch-to-block.c.patch [bz#782028]
+- seabios-scsi-get-physical-chs-geometry-from-mode-page-0x04.patch [bz#782028]
+- seabios-always-specify-virtio-blk-rather-than-virtio.patch [bz#782028]
+- seabios-virtio-pci-include-pci.h-and-pci_regs.h.patch [bz#782028]
+- seabios-virtio-pci-introduce-vp_init_simple.patch [bz#782028]
+- seabios-virtio-pci-allocate-vq-in-vp_find_vq.patch [bz#782028]
+- seabios-add-virtio-scsi-driver.patch [bz#782028]
+- Resolves: bz#782028
+  ([RFE] virtio-scsi boot support in SeaBIOS)
+
+* Fri Feb 17 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-10.el6
+- seabios-Remove-HPET-from-DSDT.patch [bz#786142]
+- Resolves: bz#786142
+  (Windows guest shows HPET device, but qemu has none.)
+
+* Mon Feb 13 2012 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-9.el6
+- seabios-mask-interrupts-on-S3-resume.patch [bz#771946]
+- Resolves: bz#771946
+  (mask interrupts on S3 resume)
+
 * Tue Nov 01 2011 Michal Novotny <minovotn@redhat.com> - seabios-0.6.1.2-8.el6
 - seabios-Add-Local-APIC-NMI-Structure-to-ACPI-MADT-wa.patch [bz#750191]
 - seabios-fix-mptable-nmi-entry-was-Re-Qemu-devel-PATC.patch [bz#750191]

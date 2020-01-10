@@ -1,0 +1,49 @@
+From 3a9899b418816561a4a734573e36750d93954c3b Mon Sep 17 00:00:00 2001
+Message-Id: <3a9899b418816561a4a734573e36750d93954c3b.1334750132.git.minovotn@redhat.com>
+From: Gleb Natapov <gleb@redhat.com>
+Date: Tue, 17 Apr 2012 12:54:54 +0200
+Subject: [PATCH] increase f-segment memory pool
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20120417125454.GP11918@redhat.com>
+Patchwork-id: 39258
+O-Subject: [PATCH seabios RHEL6.3] increase f-segment memory pool
+Bugzilla: 810471
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+
+f-segment memory pool is used for storing some BIOS tables and also for
+disk structures allocations. When to many CPU sockets are defined there
+is no enough space left to initialize disks so boot starts to fail.
+
+BZ: 810471
+Upstream status: not needed. Usptream reallocates 32bit init code into
+high memory and frees a lot of space in f-segment which is added to the
+pool.
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+--
+			Gleb.
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/config.h |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/config.h b/src/config.h
+index fe44bf8..79fdafb 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -136,7 +136,7 @@
+ // Maximum number of map entries in the e820 map
+ #define CONFIG_MAX_E820 32
+ // Space to reserve in f-segment for dynamic allocations
+-#define CONFIG_MAX_BIOSTABLE 2048
++#define CONFIG_MAX_BIOSTABLE 4096
+ // Space to reserve in high-memory for tables
+ #define CONFIG_MAX_HIGHTABLE (64*1024)
+ // Largest supported externaly facing drive id
+-- 
+1.7.7.6
+

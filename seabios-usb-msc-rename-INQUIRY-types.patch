@@ -1,0 +1,73 @@
+From e5f0d26a91c73246aa66c5b3aa3661a67a9ebaaf Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:03 +0100
+Subject: [PATCH 12/22] usb-msc: rename INQUIRY types
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-13-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36972
+O-Subject: [RHEL6.3 PATCH seabios 12/22] usb-msc: rename INQUIRY types
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+They are generic SCSI constants, rename them as such.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from 27300456df971cb07dfc2fe98317f8559966f748)
+---
+ src/blockcmd.h |    3 +++
+ src/usb-msc.c  |    2 +-
+ src/usb-msc.h  |    3 ---
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/blockcmd.h |    3 +++
+ src/usb-msc.c  |    2 +-
+ src/usb-msc.h  |    3 ---
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/blockcmd.h b/src/blockcmd.h
+index a92ed92..b3e3a64 100644
+--- a/src/blockcmd.h
++++ b/src/blockcmd.h
+@@ -56,6 +56,9 @@ struct cdbres_request_sense {
+     u32 reserved_0e;
+ } PACKED;
+ 
++#define SCSI_TYPE_DISK  0x00
++#define SCSI_TYPE_CDROM 0x05
++
+ struct cdbres_inquiry {
+     u8 pdt;
+     u8 removable;
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index 3f92bc0..0648e18 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -235,7 +235,7 @@ usb_msc_init(struct usb_pipe *pipe
+             , vendor, product, rev, pdt, removable);
+     udrive_g->drive.removable = removable;
+ 
+-    if (pdt == USB_MSC_TYPE_CDROM) {
++    if (pdt == SCSI_TYPE_CDROM) {
+         char *desc = znprintf(MAXDESCSIZE, "DVD/CD [USB Drive %s %s %s]"
+                               , vendor, product, rev);
+         ret = setup_drive_cdrom(&udrive_g->drive, desc);
+diff --git a/src/usb-msc.h b/src/usb-msc.h
+index 71adb20..a8686a3 100644
+--- a/src/usb-msc.h
++++ b/src/usb-msc.h
+@@ -21,7 +21,4 @@ int process_usb_op(struct disk_op_s *op);
+ 
+ #define US_PR_BULK         0x50
+ 
+-#define USB_MSC_TYPE_DISK  0x00
+-#define USB_MSC_TYPE_CDROM 0x05
+-
+ #endif // ush-msc.h
+-- 
+1.7.7.6
+

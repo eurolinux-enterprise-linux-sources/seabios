@@ -1,0 +1,48 @@
+From 27a04fd621f3735a2b1fda1307621ce60c8086ba Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Tue, 20 Mar 2012 10:01:41 -0300
+Subject: [PATCH 2/2] Drop FIX_RTC flag from FADT.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20120320100141.GI22368@redhat.com>
+Patchwork-id: 38621
+O-Subject: [PATCH RHEL6.3 seabios] Drop FIX_RTC flag from FADT.
+Bugzilla: 804933
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+
+FIX_RTC flag should be set if RTC wake status is _not_ reported in fixed
+register space, but this is not the case for QEMU. So drop it from FADT.
+
+BZ: 804933
+Upstream: posted.
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+
+--
+			Gleb.
+
+Signed-off-by: Eduardo Habkost <ehabkost@raisama.net>
+---
+ src/acpi.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/acpi.c b/src/acpi.c
+index 374487d..3af26c2 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -267,8 +267,8 @@ build_fadt(int bdf)
+     fadt->plvl2_lat = cpu_to_le16(0xfff); // C2 state not supported
+     fadt->plvl3_lat = cpu_to_le16(0xfff); // C3 state not supported
+     pci_init_device(fadt_init_tbl, bdf, fadt);
+-    /* WBINVD + PROC_C1 + SLP_BUTTON + FIX_RTC + RTC_S4 */
+-    fadt->flags = cpu_to_le32((1 << 0) | (1 << 2) | (1 << 5) | (1 << 6) | (1 << 7));
++    /* WBINVD + PROC_C1 + SLP_BUTTON + RTC_S4 */
++    fadt->flags = cpu_to_le32((1 << 0) | (1 << 2) | (1 << 5) | (1 << 7));
+ 
+     build_header((void*)fadt, FACP_SIGNATURE, sizeof(*fadt), 1);
+ 
+-- 
+1.7.3.2
+

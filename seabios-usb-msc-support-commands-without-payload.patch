@@ -1,0 +1,62 @@
+From fbab036f7b7be8236c3c2c8d1de1203c004f15c0 Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:35:57 +0100
+Subject: [PATCH 06/22] usb-msc: support commands without payload
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-7-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36974
+O-Subject: [RHEL6.3 PATCH seabios 06/22] usb-msc: support commands without payload
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+This lets the usb-msc driver send TEST UNIT READY commands.
+
+Modified to avoid divide by zero by Kevin O'Connor <kevin@koconnor.net>
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+(cherry-picked from 7f7b0f6cbd716f18494d26045e42dd7a3c26dfb0)
+---
+ src/usb-msc.c |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/usb-msc.c |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index a8e92ef..d326381 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -76,9 +76,11 @@ usb_cmd_data(struct disk_op_s *op, void *cdbcmd, u16 blocksize)
+         goto fail;
+ 
+     // Transfer data from device.
+-    ret = usb_send_bulk(bulkin, USB_DIR_IN, op->buf_fl, bytes);
+-    if (ret)
+-        goto fail;
++    if (bytes) {
++        ret = usb_send_bulk(bulkin, USB_DIR_IN, op->buf_fl, bytes);
++        if (ret)
++            goto fail;
++    }
+ 
+     // Transfer csw info.
+     struct csw_s csw;
+@@ -92,7 +94,8 @@ usb_cmd_data(struct disk_op_s *op, void *cdbcmd, u16 blocksize)
+     if (csw.bCSWStatus == 2)
+         goto fail;
+ 
+-    op->count -= csw.dCSWDataResidue / blocksize;
++    if (blocksize)
++        op->count -= csw.dCSWDataResidue / blocksize;
+     return DISK_RET_EBADTRACK;
+ 
+ fail:
+-- 
+1.7.7.6
+

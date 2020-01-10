@@ -1,0 +1,46 @@
+From d9438bbb67153a7071761ea7cce121ebb3d7ab63 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Thu, 9 Feb 2012 13:26:34 +0100
+Subject: [PATCH] mask interrupts on S3 resume
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20120209132634.GN18866@redhat.com>
+Patchwork-id: 37152
+O-Subject: [PATCH RHEL6.3 seabios] mask interrupts on S3 resume
+Bugzilla: 771946
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+i8259 clears interrupt mask on reset. Interrupt need to be
+masked again before enabling interrupts on CPU. Since option
+roms are called with interrupts enabled, resume should mask
+interrupts in i8259 before calling vgabios.
+
+Upstream: ecae9bfd29e398cf93864a3effb183a717fa749d
+BZ: 771946
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+--
+			Gleb.
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/resume.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/resume.c b/src/resume.c
+index 81ad1ac..f7c4147 100644
+--- a/src/resume.c
++++ b/src/resume.c
+@@ -102,6 +102,7 @@ s3_resume(void)
+ 
+     dprintf(1, "In 32bit resume\n");
+ 
++    pic_setup();
+     smm_init();
+ 
+     s3_resume_vga_init();
+-- 
+1.7.7.5
+

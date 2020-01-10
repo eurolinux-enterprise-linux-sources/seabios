@@ -1,0 +1,112 @@
+From 8523449400670662f882863411672cb91efd4a8d Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:02 +0100
+Subject: [PATCH 11/22] Extract space trimming code from ATA and use in USB
+ and bootorder code.
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-12-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36979
+O-Subject: [RHEL6.3 PATCH seabios 11/22] Extract space trimming code from ATA and use in USB and bootorder code.
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Introduce function nullTrailingSpace() that nulls blank characters
+from the end of a string.  Use this function in the ATA, USB MSC, and
+bootorder code.
+
+(cherry picked from 9e881a3821b045c9b75c64e9c349dc82b276df28)
+---
+ src/boot.c    |    1 +
+ src/usb-msc.c |   14 ++++++++------
+ src/util.c    |   10 ++++++++++
+ src/util.h    |    1 +
+ 4 files changed, 20 insertions(+), 6 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/boot.c    |    1 +
+ src/usb-msc.c |   14 ++++++++------
+ src/util.c    |   10 ++++++++++
+ src/util.h    |    1 +
+ 4 files changed, 20 insertions(+), 6 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index afb8037..e8f6de3 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -51,6 +51,7 @@ loadBootOrder(void)
+         f = strchr(f, '\n');
+         if (f)
+             *(f++) = '\0';
++        nullTrailingSpace(Bootorder[i]);
+         dprintf(3, "%d: %s\n", i+1, Bootorder[i]);
+         i++;
+     } while (f);
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index 63ec340..3f92bc0 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -223,14 +223,16 @@ usb_msc_init(struct usb_pipe *pipe
+         goto fail;
+     char vendor[sizeof(data.vendor)+1], product[sizeof(data.product)+1];
+     char rev[sizeof(data.rev)+1];
++    strtcpy(vendor, data.vendor, sizeof(vendor));
++    nullTrailingSpace(vendor);
++    strtcpy(product, data.product, sizeof(product));
++    nullTrailingSpace(product);
++    strtcpy(rev, data.rev, sizeof(rev));
++    nullTrailingSpace(rev);
+     int pdt = data.pdt & 0x1f;
+     int removable = !!(data.removable & 0x80);
+-    dprintf(1, "USB MSC vendor='%s' product='%s' rev='%s'"
+-            " type=%d removable=%d\n"
+-            , strtcpy(vendor, data.vendor, sizeof(vendor))
+-            , strtcpy(product, data.product, sizeof(product))
+-            , strtcpy(rev, data.rev, sizeof(rev))
+-            , pdt, removable);
++    dprintf(1, "USB MSC vendor='%s' product='%s' rev='%s' type=%d removable=%d\n"
++            , vendor, product, rev, pdt, removable);
+     udrive_g->drive.removable = removable;
+ 
+     if (pdt == USB_MSC_TYPE_CDROM) {
+diff --git a/src/util.c b/src/util.c
+index 8ca12f6..01011e6 100644
+--- a/src/util.c
++++ b/src/util.c
+@@ -263,6 +263,16 @@ strchr(const char *s, int c)
+     return NULL;
+ }
+ 
++// Remove any trailing blank characters (spaces, new lines, carriage returns)
++void
++nullTrailingSpace(char *buf)
++{
++    int len = strlen(buf);
++    char *end = &buf[len-1];
++    while (end >= buf && *end <= ' ')
++        *(end--) = '\0';
++}
++
+ /****************************************************************
+  * Keyboard calls
+  ****************************************************************/
+diff --git a/src/util.h b/src/util.h
+index 4723dec..4a04256 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -209,6 +209,7 @@ void iomemcpy(void *d, const void *s, u32 len);
+ void *memmove(void *d, const void *s, size_t len);
+ char *strtcpy(char *dest, const char *src, size_t len);
+ char *strchr(const char *s, int c);
++void nullTrailingSpace(char *buf);
+ int get_keystroke(int msec);
+ 
+ // stacks.c
+-- 
+1.7.7.6
+

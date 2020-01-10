@@ -1,0 +1,86 @@
+From deab626b396b7e6ad42321f076cc49e64d71444a Mon Sep 17 00:00:00 2001
+From: Paolo Bonzini <pbonzini@redhat.com>
+Date: Fri, 27 Jan 2012 16:36:11 +0100
+Subject: [PATCH 20/22] virtio-pci: introduce vp_init_simple
+
+RH-Author: Paolo Bonzini <pbonzini@redhat.com>
+Message-id: <1327682173-30723-21-git-send-email-pbonzini@redhat.com>
+Patchwork-id: 36989
+O-Subject: [RHEL6.3 PATCH seabios 20/22] virtio-pci: introduce vp_init_simple
+Bugzilla: 782028
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Markus Armbruster <armbru@redhat.com>
+RH-Acked-by: Alon Levy <alevy@redhat.com>
+
+Put together the common parts of all virtio device initialization.
+
+Signed-off-by: Paolo Bonzini <pbonzini@redhat.com>
+(cherry-picked from 4e34332fbf9b04ae9040f0f0c07b40455690e535)
+---
+ src/virtio-blk.c |    9 +--------
+ src/virtio-pci.c |   11 +++++++++++
+ src/virtio-pci.h |    1 +
+ 3 files changed, 13 insertions(+), 8 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/virtio-blk.c |    9 +--------
+ src/virtio-pci.c |   11 +++++++++++
+ src/virtio-pci.h |    1 +
+ 3 files changed, 13 insertions(+), 8 deletions(-)
+
+diff --git a/src/virtio-blk.c b/src/virtio-blk.c
+index 3ea548b..3d2c839 100644
+--- a/src/virtio-blk.c
++++ b/src/virtio-blk.c
+@@ -113,15 +113,8 @@ init_virtio_blk(u16 bdf)
+     vdrive_g->drive.cntl_id = bdf;
+     vdrive_g->vq = vq;
+ 
+-    u16 ioaddr = pci_config_readl(bdf, PCI_BASE_ADDRESS_0) &
+-        PCI_BASE_ADDRESS_IO_MASK;
+-
++    u16 ioaddr = vp_init_simple(bdf);
+     vdrive_g->ioaddr = ioaddr;
+-
+-    vp_reset(ioaddr);
+-    vp_set_status(ioaddr, VIRTIO_CONFIG_S_ACKNOWLEDGE |
+-                  VIRTIO_CONFIG_S_DRIVER );
+-
+     if (vp_find_vq(ioaddr, 0, vdrive_g->vq) < 0 ) {
+         dprintf(1, "fail to find vq for virtio-blk %x:%x\n",
+                 pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
+diff --git a/src/virtio-pci.c b/src/virtio-pci.c
+index 2ac0e70..1efa6bf 100644
+--- a/src/virtio-pci.c
++++ b/src/virtio-pci.c
+@@ -69,3 +69,14 @@ int vp_find_vq(unsigned int ioaddr, int queue_index,
+ 
+    return num;
+ }
++
++u16 vp_init_simple(u16 bdf)
++{
++    u16 ioaddr = pci_config_readl(bdf, PCI_BASE_ADDRESS_0) &
++        PCI_BASE_ADDRESS_IO_MASK;
++
++    vp_reset(ioaddr);
++    vp_set_status(ioaddr, VIRTIO_CONFIG_S_ACKNOWLEDGE |
++                  VIRTIO_CONFIG_S_DRIVER );
++    return ioaddr;
++}
+diff --git a/src/virtio-pci.h b/src/virtio-pci.h
+index d21d5a5..60e7b35 100644
+--- a/src/virtio-pci.h
++++ b/src/virtio-pci.h
+@@ -99,6 +99,7 @@ static inline void vp_del_vq(unsigned int ioaddr, int queue_index)
+ }
+ 
+ struct vring_virtqueue;
++u16 vp_init_simple(u16 bdf);
+ int vp_find_vq(unsigned int ioaddr, int queue_index,
+                struct vring_virtqueue *vq);
+ #endif /* _VIRTIO_PCI_H_ */
+-- 
+1.7.7.6
+

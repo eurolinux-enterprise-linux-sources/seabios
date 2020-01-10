@@ -1,0 +1,67 @@
+From 79090cfa592b7717aea495317fa774e960c049a2 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Tue, 31 Jan 2012 15:26:35 +0100
+Subject: [PATCH] Remove HPET from DSDT
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20120131152635.GB32059@redhat.com>
+Patchwork-id: 37017
+O-Subject: [PATCH RHEL6.3 seabios] Remove HPET from DSDT
+Bugzilla: 786142
+RH-Acked-by: Luiz Capitulino <lcapitulino@redhat.com>
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+From: Yan Vugenfirer <yvugenfi@redhat.com>
+
+Although HPET is disabled in seabois, Windows guest still detects it and
+installs device for it. Removing it completely from the DSDT will cause
+Windows guest to stop detecting and displaying HPET in device manager.
+
+Upstream: not needed.
+BZ: 786142
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+Signed-off-by: Yan Vugenfirer <yvugenfi@redhat.com>
+---
+ src/acpi-dsdt.dsl |   19 -------------------
+ 1 files changed, 0 insertions(+), 19 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi-dsdt.dsl |   19 -------------------
+ 1 files changed, 0 insertions(+), 19 deletions(-)
+
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index 1db5ae9..be888c1 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -201,25 +201,6 @@ DefinitionBlock (
+                     ,, , AddressRangeMemory, TypeStatic)
+             })
+         }
+-
+-        Device(HPET) {
+-            Name(_HID,  EISAID("PNP0103"))
+-            Name(_UID, 0)
+-            Method (_STA, 0, NotSerialized) {
+-                    Return(0x0F)
+-            }
+-            Name(_CRS, ResourceTemplate() {
+-                DWordMemory(
+-                    ResourceConsumer, PosDecode, MinFixed, MaxFixed,
+-                    NonCacheable, ReadWrite,
+-                    0x00000000,
+-                    0xFED00000,
+-                    0xFED003FF,
+-                    0x00000000,
+-                    0x00000400 /* 1K memory: FED00000 - FED003FF */
+-                )
+-            })
+-        }
+     }
+ 
+     Scope(\_SB.PCI0) {
+-- 
+1.7.7.6
+
