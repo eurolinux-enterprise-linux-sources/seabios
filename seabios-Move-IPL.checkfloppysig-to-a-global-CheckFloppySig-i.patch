@@ -1,0 +1,81 @@
+From 759c8a4c330ffc9d4a99c97a0e66844e5a85df25 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:56 -0200
+Subject: [PATCH 18/29] Move IPL.checkfloppysig to a global (CheckFloppySig) in boot.c.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-18-git-send-email-gleb@redhat.com>
+Patchwork-id: 16180
+O-Subject: [PATCH SEABIOS RHEL6.1 17/25] Move IPL.checkfloppysig to a global
+	(CheckFloppySig) in boot.c.
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Upstream commit: baaadb6
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/boot.c |    7 ++++---
+ src/boot.h |    1 -
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c |    7 ++++---
+ src/boot.h |    1 -
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 8e33d53..dacf639 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -86,6 +86,8 @@ int bootprio_find_named_rom(const char *name, int instance)
+  * Boot setup
+  ****************************************************************/
+ 
++static int CheckFloppySig = 1;
++
+ #define DEFAULT_PRIO           9999
+ 
+ static int DefaultFloppyPrio = 101;
+@@ -100,12 +102,11 @@ boot_setup(void)
+         return;
+ 
+     SET_EBDA(boot_sequence, 0xffff);
+-    IPL.checkfloppysig = 1;
+ 
+     if (!CONFIG_COREBOOT) {
+         // On emulators, get boot order from nvram.
+         if (inb_cmos(CMOS_BIOS_BOOTFLAG1) & 1)
+-            IPL.checkfloppysig = 0;
++            CheckFloppySig = 0;
+         u32 bootorder = (inb_cmos(CMOS_BIOS_BOOTFLAG2)
+                          | ((inb_cmos(CMOS_BIOS_BOOTFLAG1) & 0xf0) << 4));
+         DefaultFloppyPrio = DefaultCDPrio = DefaultHDPrio
+@@ -473,7 +474,7 @@ do_boot(u16 seq_nr)
+     switch (ie->type) {
+     case IPL_TYPE_FLOPPY:
+         printf("Booting from Floppy...\n");
+-        boot_disk(0x00, IPL.checkfloppysig);
++        boot_disk(0x00, CheckFloppySig);
+         break;
+     case IPL_TYPE_HARDDISK:
+         printf("Booting from Hard Disk...\n");
+diff --git a/src/boot.h b/src/boot.h
+index fa455d5..7801ed5 100644
+--- a/src/boot.h
++++ b/src/boot.h
+@@ -15,7 +15,6 @@ struct ipl_entry_s {
+ struct ipl_s {
+     struct ipl_entry_s bev[8];
+     int bevcount;
+-    int checkfloppysig;
+     char **fw_bootorder;
+     int fw_bootorder_count;
+ };
+-- 
+1.7.4.rc1.16.gd2f15e
+

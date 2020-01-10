@@ -1,0 +1,98 @@
+From a0f75fc0cdf8b857a07afcaf33ee9f07c3061bcb Mon Sep 17 00:00:00 2001
+From: Andrea Arcangeli <aarcange@redhat.com>
+Date: Fri, 30 Sep 2011 17:31:55 +0200
+Subject: [PATCH] add 40-48 bit RAM range to seabios
+
+RH-Author: Andrea Arcangeli <aarcange@redhat.com>
+Message-id: <20110930173155.GO7768@redhat.com>
+Patchwork-id: 33433
+O-Subject: [PATCH RHEL6.2 seabios] add 40-48 bit RAM range to seabios
+Bugzilla: 630975
+RH-Acked-by: Juan Quintela <quintela@redhat.com>
+RH-Acked-by: Marcelo Tosatti <mtosatti@redhat.com>
+RH-Acked-by: Avi Kivity <avi@redhat.com>
+
+Hello,
+
+This patch should be applied to the seabios rpm package at the same
+time of the other one for qemu-kvm with subject "[PATCH RHEL6.2
+qemu-kvm] allow more than 1T in KVM x86 guest". I didn't find the repo
+package for seabios this is against upstream but it will most
+certainly apply clean because this area had no changes for a long time
+(at least upstream).
+
+https://bugzilla.redhat.com/show_bug.cgi?id=630975
+
+The qemu-devel list wanted another protocol different from the
+inb_cmos to communicate the ram size from qemu to seabios, but the
+main incompatibility would happen if the upstream seabios uses 0x5e
+for something completely different, then the upstream seabios wouldn't
+work on our qemu-kvm binary package anymore and our seabios wouldn't
+work on the upstream qemu-kvm package anymore. Risk of collision is
+fairly low though I guess, but even if it happens I doubt it's a
+problem. The guest doesn't see this.
+
+I think this is lower risk than whatever more complicated way to
+achieve this feature that was suggested on qemu-devel (which I didn't
+understand fully). This is the strict fix, not including a rewrite of
+the whole ram-information protocol just to add 8 more bits of
+information!
+
+===
+Subject: add 40-48 bit RAM range to seabios
+
+From: Andrea Arcangeli <aarcange@redhat.com>
+
+Needed to show >1TB RAM to guests.
+
+This uses a new cmos port at 0x5e that shall read zero to be backwards
+compatible.
+
+Signed-off-by: Andrea Arcangeli <aarcange@redhat.com>
+---
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/cmos.h |    7 ++++---
+ src/post.c |    7 ++++---
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/cmos.h b/src/cmos.h
+index e4b6462..e810534 100644
+--- a/src/cmos.h
++++ b/src/cmos.h
+@@ -36,9 +36,10 @@
+ #define CMOS_BIOS_BOOTFLAG1      0x38
+ #define CMOS_BIOS_DISKTRANSFLAG  0x39
+ #define CMOS_BIOS_BOOTFLAG2      0x3d
+-#define CMOS_MEM_HIGHMEM_LOW     0x5b
+-#define CMOS_MEM_HIGHMEM_MID     0x5c
+-#define CMOS_MEM_HIGHMEM_HIGH    0x5d
++#define CMOS_MEM_HIGHMEM_16      0x5b
++#define CMOS_MEM_HIGHMEM_24      0x5c
++#define CMOS_MEM_HIGHMEM_32      0x5d
++#define CMOS_MEM_HIGHMEM_40      0x5e
+ #define CMOS_BIOS_SMP_COUNT      0x5f
+ 
+ // CMOS_FLOPPY_DRIVE_TYPE bitdefs
+diff --git a/src/post.c b/src/post.c
+index 5b08f5a..f2b2000 100644
+--- a/src/post.c
++++ b/src/post.c
+@@ -107,9 +107,10 @@ ram_probe(void)
+         add_e820(0, rs, E820_RAM);
+ 
+         // Check for memory over 4Gig
+-        u64 high = ((inb_cmos(CMOS_MEM_HIGHMEM_LOW) << 16)
+-                    | ((u32)inb_cmos(CMOS_MEM_HIGHMEM_MID) << 24)
+-                    | ((u64)inb_cmos(CMOS_MEM_HIGHMEM_HIGH) << 32));
++        u64 high = ((inb_cmos(CMOS_MEM_HIGHMEM_16) << 16)
++                    | ((u32)inb_cmos(CMOS_MEM_HIGHMEM_24) << 24)
++                    | ((u64)inb_cmos(CMOS_MEM_HIGHMEM_32) << 32)
++		    | ((u64)inb_cmos(CMOS_MEM_HIGHMEM_40) << 40));
+         RamSizeOver4G = high;
+         add_e820(0x100000000ull, high, E820_RAM);
+ 
+-- 
+1.7.4.4
+

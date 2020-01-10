@@ -1,0 +1,119 @@
+From 5f87f03c2c467f2a12ffe1cbf31c50544a664bc7 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:51 -0200
+Subject: [PATCH 13/29] Rename add_ordered_drive() to add_drive() and use in map_hd_drive().
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-13-git-send-email-gleb@redhat.com>
+Patchwork-id: 16189
+O-Subject: [PATCH SEABIOS RHEL6.1 12/25] Rename add_ordered_drive() to
+	add_drive() and use in map_hd_drive().
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Upstream commit: 3c5e0e1
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/block.c |   43 ++++++++++++++++++-------------------------
+ 1 files changed, 18 insertions(+), 25 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/block.c |   43 ++++++++++++++++++-------------------------
+ 1 files changed, 18 insertions(+), 25 deletions(-)
+
+diff --git a/src/block.c b/src/block.c
+index 4c37f65..d135d7f 100644
+--- a/src/block.c
++++ b/src/block.c
+@@ -29,14 +29,13 @@ getDrive(u8 exttype, u8 extdriveoffset)
+ int getDriveId(u8 exttype, struct drive_s *drive_g)
+ {
+     int i;
+-
+     for (i = 0; i < ARRAY_SIZE(Drives.idmap[0]); i++)
+         if (getDrive(exttype, i) == drive_g)
+             return i;
+-
+     return -1;
+ }
+ 
++
+ /****************************************************************
+  * Disk geometry translation
+  ****************************************************************/
+@@ -199,27 +198,9 @@ fill_fdpt(struct drive_s *drive_g, int hdid)
+                                  struct extended_bios_data_area_s, fdpt[1])));
+ }
+ 
+-// Map a drive (that was registered via add_bcv_hd)
+-void
+-map_hd_drive(struct drive_s *drive_g)
+-{
+-    // fill hdidmap
+-    u8 hdcount = GET_BDA(hdcount);
+-    if (hdcount >= ARRAY_SIZE(Drives.idmap[0])) {
+-        warn_noalloc();
+-        return;
+-    }
+-    dprintf(3, "Mapping hd drive %p to %d\n", drive_g, hdcount);
+-    Drives.idmap[EXTTYPE_HD][hdcount] = drive_g;
+-    SET_BDA(hdcount, hdcount + 1);
+-
+-    // Fill "fdpt" structure.
+-    fill_fdpt(drive_g, hdcount);
+-}
+-
+ // Find spot to add a drive
+ static void
+-add_ordered_drive(struct drive_s **idmap, u8 *count, struct drive_s *drive_g)
++add_drive(struct drive_s **idmap, u8 *count, struct drive_s *drive_g)
+ {
+     if (*count >= ARRAY_SIZE(Drives.idmap[0])) {
+         warn_noalloc();
+@@ -229,22 +210,34 @@ add_ordered_drive(struct drive_s **idmap, u8 *count, struct drive_s *drive_g)
+     *count = *count + 1;
+ }
+ 
++// Map a hard drive
++void
++map_hd_drive(struct drive_s *drive_g)
++{
++    ASSERT32FLAT();
++    struct bios_data_area_s *bda = MAKE_FLATPTR(SEG_BDA, 0);
++    int hdid = bda->hdcount;
++    dprintf(3, "Mapping hd drive %p to %d\n", drive_g, hdid);
++    add_drive(Drives.idmap[EXTTYPE_HD], &bda->hdcount, drive_g);
++
++    // Fill "fdpt" structure.
++    fill_fdpt(drive_g, hdid);
++}
++
+ // Map a cd
+ void
+ map_cd_drive(struct drive_s *drive_g)
+ {
+     dprintf(3, "Mapping cd drive %p\n", drive_g);
+-    add_ordered_drive(Drives.idmap[EXTTYPE_CD], &Drives.cdcount, drive_g);
++    add_drive(Drives.idmap[EXTTYPE_CD], &Drives.cdcount, drive_g);
+ }
+ 
+ // Map a floppy
+ void
+ map_floppy_drive(struct drive_s *drive_g)
+ {
+-    // fill idmap
+     dprintf(3, "Mapping floppy drive %p\n", drive_g);
+-    add_ordered_drive(Drives.idmap[EXTTYPE_FLOPPY], &Drives.floppycount
+-                      , drive_g);
++    add_drive(Drives.idmap[EXTTYPE_FLOPPY], &Drives.floppycount, drive_g);
+ 
+     // Update equipment word bits for floppy
+     if (Drives.floppycount == 1) {
+-- 
+1.7.4.rc1.16.gd2f15e
+

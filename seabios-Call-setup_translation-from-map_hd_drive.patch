@@ -1,0 +1,116 @@
+From 5a689901e7612448f99bdca5c391dcdef2034c6d Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:52 -0200
+Subject: [PATCH 14/29] Call setup_translation() from map_hd_drive().
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-14-git-send-email-gleb@redhat.com>
+Patchwork-id: 16188
+O-Subject: [PATCH SEABIOS RHEL6.1 13/25] Call setup_translation() from
+	map_hd_drive().
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Unify the calling of setup_translation().
+
+Upstream commit: 697e63c
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/ata.c        |    3 ---
+ src/block.c      |    5 ++++-
+ src/disk.h       |    1 -
+ src/usb-msc.c    |    3 ---
+ src/virtio-blk.c |    1 -
+ 5 files changed, 4 insertions(+), 9 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/ata.c        |    3 ---
+ src/block.c      |    5 ++++-
+ src/disk.h       |    1 -
+ src/usb-msc.c    |    3 ---
+ src/virtio-blk.c |    1 -
+ 5 files changed, 4 insertions(+), 9 deletions(-)
+
+diff --git a/src/ata.c b/src/ata.c
+index 9cba7a9..0aa3237 100644
+--- a/src/ata.c
++++ b/src/ata.c
+@@ -829,9 +829,6 @@ init_drive_ata(struct atadrive_s *dummy, u16 *buffer)
+              , (u32)adjsize, adjprefix);
+     dprintf(1, "%s\n", adrive_g->drive.desc);
+ 
+-    // Setup disk geometry translation.
+-    setup_translation(&adrive_g->drive);
+-
+     int prio = bootprio_find_ata_device(adrive_g->chan_gf->pci_bdf,
+                                         adrive_g->chan_gf->chanid,
+                                         adrive_g->slave);
+diff --git a/src/block.c b/src/block.c
+index d135d7f..36a6607 100644
+--- a/src/block.c
++++ b/src/block.c
+@@ -71,7 +71,7 @@ get_translation(struct drive_s *drive_g)
+     return TRANSLATION_LBA;
+ }
+ 
+-void
++static void
+ setup_translation(struct drive_s *drive_g)
+ {
+     u8 translation = get_translation(drive_g);
+@@ -220,6 +220,9 @@ map_hd_drive(struct drive_s *drive_g)
+     dprintf(3, "Mapping hd drive %p to %d\n", drive_g, hdid);
+     add_drive(Drives.idmap[EXTTYPE_HD], &bda->hdcount, drive_g);
+ 
++    // Setup disk geometry translation.
++    setup_translation(drive_g);
++
+     // Fill "fdpt" structure.
+     fill_fdpt(drive_g, hdid);
+ }
+diff --git a/src/disk.h b/src/disk.h
+index cb3f993..0abebf7 100644
+--- a/src/disk.h
++++ b/src/disk.h
+@@ -229,7 +229,6 @@ struct drives_s {
+ extern struct drives_s Drives;
+ struct drive_s *getDrive(u8 exttype, u8 extdriveoffset);
+ int getDriveId(u8 exttype, struct drive_s *drive_g);
+-void setup_translation(struct drive_s *drive_g);
+ void map_floppy_drive(struct drive_s *drive_g);
+ void map_hd_drive(struct drive_s *drive_g);
+ void map_cd_drive(struct drive_s *drive_g);
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index dbac8a0..c61140a 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -164,9 +164,6 @@ setup_drive_hd(struct disk_op_s *op)
+     op->drive_g->sectors = sectors;
+     dprintf(1, "USB MSC blksize=%d sectors=%d\n", blksize, sectors);
+ 
+-    // Setup disk geometry translation.
+-    setup_translation(op->drive_g);
+-
+     // Register with bcv system.
+     boot_add_hd(op->drive_g, -1);
+ 
+diff --git a/src/virtio-blk.c b/src/virtio-blk.c
+index 834523a..6b49164 100644
+--- a/src/virtio-blk.c
++++ b/src/virtio-blk.c
+@@ -155,7 +155,6 @@ init_virtio_blk(u16 bdf)
+              pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
+     vdrive_g->drive.desc = desc;
+ 
+-    setup_translation(&vdrive_g->drive);
+     boot_add_hd(&vdrive_g->drive, bootprio_find_pci_device(bdf));
+ 
+     vp_set_status(ioaddr, VIRTIO_CONFIG_S_ACKNOWLEDGE |
+-- 
+1.7.4.rc1.16.gd2f15e
+

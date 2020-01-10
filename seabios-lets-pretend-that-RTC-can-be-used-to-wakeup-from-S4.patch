@@ -1,0 +1,47 @@
+From 55d36a88d1b3641b1cf2c5292b04e59d22fd80ff Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Sun, 30 Jan 2011 12:22:43 -0200
+Subject: [PATCH 2/2] lets pretend that RTC can be used to wakeup from S4
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20110130122242.GG5700@redhat.com>
+Patchwork-id: 17275
+O-Subject: [PATCH SEABIOS RHEL6.1] lets pretend that RTC can be used to
+	wakeup from S4
+Bugzilla: 663240
+RH-Acked-by: Marcelo Tosatti <mtosatti@redhat.com>
+RH-Acked-by: Juan Quintela <quintela@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+WHQL complains otherwise.
+
+Upstream status: patch posted
+BZ: 663240
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+--
+			Gleb.
+
+Signed-off-by: Eduardo Habkost <ehabkost@raisama.net>
+---
+ src/acpi.c |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/acpi.c b/src/acpi.c
+index 0a368a4..4326bae 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -259,8 +259,8 @@ build_fadt(int bdf)
+     fadt->plvl2_lat = cpu_to_le16(0xfff); // C2 state not supported
+     fadt->plvl3_lat = cpu_to_le16(0xfff); // C3 state not supported
+     pci_init_device(fadt_init_tbl, bdf, fadt);
+-    /* WBINVD + PROC_C1 + SLP_BUTTON + FIX_RTC */
+-    fadt->flags = cpu_to_le32((1 << 0) | (1 << 2) | (1 << 5) | (1 << 6));
++    /* WBINVD + PROC_C1 + SLP_BUTTON + FIX_RTC + RTC_S4 */
++    fadt->flags = cpu_to_le32((1 << 0) | (1 << 2) | (1 << 5) | (1 << 6) | (1 << 7));
+ 
+     build_header((void*)fadt, FACP_SIGNATURE, sizeof(*fadt), 1);
+ 
+-- 
+1.7.3.2
+

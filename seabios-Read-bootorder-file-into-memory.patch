@@ -1,0 +1,102 @@
+From f4d14c1d91ce929dde64ecc887783a0fabc70d32 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:43 -0200
+Subject: [PATCH 05/29] Read bootorder file into memory.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-5-git-send-email-gleb@redhat.com>
+Patchwork-id: 16183
+O-Subject: [PATCH SEABIOS RHEL6.1 04/25] Read bootorder file into memory.
+Bugzilla: 643688
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+Read bootorder file, parse it and put it into array for easy
+consumption.
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+
+Upstream commit: b9a7591
+---
+ src/boot.c |   45 +++++++++++++++++++++++++++++++++++++++++++++
+ src/boot.h |    2 ++
+ 2 files changed, 47 insertions(+), 0 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c |   45 +++++++++++++++++++++++++++++++++++++++++++++
+ src/boot.h |    2 ++
+ 2 files changed, 47 insertions(+), 0 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 9c94439..9c37023 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -67,6 +67,51 @@ boot_setup(void)
+         if (!(inb_cmos(CMOS_BIOS_BOOTFLAG1) & 1))
+             IPL.checkfloppysig = 1;
+     }
++
++    u32 file = romfile_find("bootorder");
++    if (!file)
++        return;
++
++    int filesize = romfile_size(file);
++    dprintf(3, "bootorder file found (len %d)\n", filesize);
++
++    if (filesize == 0)
++        return;
++
++    char *f = malloc_tmphigh(filesize);
++
++    if (!f) {
++        warn_noalloc();
++        return;
++    }
++
++    romfile_copy(file, f, filesize);
++    int i;
++    IPL.fw_bootorder_count = 1;
++    while(f[i]) {
++        if (f[i] == '\n')
++            IPL.fw_bootorder_count++;
++        i++;
++    }
++    IPL.fw_bootorder = malloc_tmphigh(IPL.fw_bootorder_count*sizeof(char*));
++    if (!IPL.fw_bootorder) {
++        warn_noalloc();
++        free(f);
++        return;
++    }
++
++    dprintf(3, "boot order:\n");
++    i = 0;
++    do {
++        IPL.fw_bootorder[i] = f;
++        f = strchr(f, '\n');
++        if (f) {
++            *f = '\0';
++            f++;
++            dprintf(3, "%d: %s\n", i, IPL.fw_bootorder[i]);
++            i++;
++        }
++    } while(f);
+ }
+ 
+ // Add a BEV vector for a given pnp compatible option rom.
+diff --git a/src/boot.h b/src/boot.h
+index f751d71..778aebd 100644
+--- a/src/boot.h
++++ b/src/boot.h
+@@ -20,6 +20,8 @@ struct ipl_s {
+     int bevcount, bcvcount;
+     u32 bootorder;
+     int checkfloppysig;
++    char **fw_bootorder;
++    int fw_bootorder_count;
+ };
+ 
+ #define IPL_TYPE_FLOPPY      0x01
+-- 
+1.7.4.rc1.16.gd2f15e
+

@@ -1,0 +1,42 @@
+From 4125b5346f9a35b3a591440299b9ce9eabb0c78f Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Thu, 13 Jan 2011 16:28:16 -0200
+Subject: [PATCH 28/29] Initialize FloppyCount and CDCount on reboot
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20110113162816.GE598@redhat.com>
+Patchwork-id: 16315
+O-Subject: Re: [PATCH SEABIOS RHEL6.1 16/25] Remove Drives global struct in
+	favor of independent global variables.
+Bugzilla: 643688
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+On Thu, Jan 13, 2011 at 02:12:58PM -0200, Eduardo Habkost wrote:
+>
+> What abbout FloppyCount, CDCount and IDMap, on block.c?
+>
+
+Yeah FloppyCount and CDCount have to be initialized, IDMap can be left
+alone. Only initialized parts are accessed by checking FloppyCount and
+CDCount.
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/block.c |    1 +
+ 1 files changed, 1 insertions(+), 0 deletions(-)
+
+diff --git a/src/block.c b/src/block.c
+index 26dd0bc..72e7081 100644
+--- a/src/block.c
++++ b/src/block.c
+@@ -328,4 +328,5 @@ send_disk_op(struct disk_op_s *op)
+ void
+ drive_setup(void)
+ {
++	FloppyCount = CDCount = 0;
+ }
+-- 
+1.7.4.rc1.16.gd2f15e
+

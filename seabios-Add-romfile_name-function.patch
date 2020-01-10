@@ -1,0 +1,76 @@
+From 0cd488838575b11354a688890a18cb5ebb896826 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:41 -0200
+Subject: [PATCH 03/29] Add romfile_name() function.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-3-git-send-email-gleb@redhat.com>
+Patchwork-id: 16167
+O-Subject: [PATCH SEABIOS RHEL6.1 02/25] Add romfile_name() function.
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+romfile_name() return file name given file handler. Works for qemu and
+coreboot.
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+
+Upstream commit: 1703ea2
+---
+ src/paravirt.c |    8 ++++++++
+ src/paravirt.h |    6 ++++++
+ 2 files changed, 14 insertions(+), 0 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/paravirt.c |    8 ++++++++
+ src/paravirt.h |    6 ++++++
+ 2 files changed, 14 insertions(+), 0 deletions(-)
+
+diff --git a/src/paravirt.c b/src/paravirt.c
+index ca646d4..308c809 100644
+--- a/src/paravirt.c
++++ b/src/paravirt.c
+@@ -345,6 +345,14 @@ int qemu_cfg_size_file(u32 select)
+     return ntohl(LastFile.size);
+ }
+ 
++
++const char* qemu_cfg_name_file(u32 select)
++{
++    if (select != ntohs(LastFile.select))
++        return NULL;
++    return LastFile.name;
++}
++
+ int qemu_cfg_read_file(u32 select, void *dst, u32 maxlen)
+ {
+     if (!qemu_cfg_present)
+diff --git a/src/paravirt.h b/src/paravirt.h
+index 7d4bc02..99c473b 100644
+--- a/src/paravirt.h
++++ b/src/paravirt.h
+@@ -71,6 +71,7 @@ struct e820_reservation {
+ u32 qemu_cfg_next_prefix_file(const char *prefix, u32 prevselect);
+ u32 qemu_cfg_find_file(const char *name);
+ int qemu_cfg_size_file(u32 select);
++const char* qemu_cfg_name_file(u32 select);
+ int qemu_cfg_read_file(u32 select, void *dst, u32 maxlen);
+ 
+ // Wrappers that select cbfs or qemu_cfg file interface.
+@@ -94,6 +95,11 @@ static inline int romfile_copy(u32 fileid, void *dst, u32 maxlen) {
+         return cbfs_copyfile((void*)fileid, dst, maxlen);
+     return qemu_cfg_read_file(fileid, dst, maxlen);
+ }
++static inline const char* romfile_name(u32 fileid) {
++    if (CONFIG_COREBOOT)
++        return cbfs_filename((void*)fileid);
++    return qemu_cfg_name_file(fileid);
++}
+ 
+ u32 qemu_cfg_e820_entries(void);
+ void* qemu_cfg_e820_load_next(void *addr);
+-- 
+1.7.4.rc1.16.gd2f15e
+

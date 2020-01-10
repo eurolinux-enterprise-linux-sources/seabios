@@ -1,0 +1,51 @@
+From d205dd297a893980fe4366a013ac627646ee9709 Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+Date: Mon, 1 Aug 2011 20:19:35 -0300
+Subject: [PATCH] seabios: increase smp_mtrr array size (v2)
+
+RH-Author: Marcelo Tosatti <mtosatti@redhat.com>
+Message-id: <20110801201935.GA11324@amt.cnet>
+Patchwork-id: 30785
+O-Subject: [RHEL6.2 seabios PATCH] seabios: increase smp_mtrr array size (v2)
+Bugzilla: 727328
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Avi Kivity <avi@redhat.com>
+
+(v2: create new bz with Component: seabios)
+
+BZ: https://bugzilla.redhat.com/show_bug.cgi?id=727328
+Upstream commit bbce6d63c18b85710b1e567a3035914c5ac13ccf.
+
+seabios: increase smp_mtrr array size
+
+Windows Server 2008 checked build complains about lack of consistency
+between MTRR MSRs in SMP guests.
+
+Problem is the smp_mtrr array is not large enough to hold all MSRs (31
+entries with current qemu/kvm implementations).
+
+Increase it to 32.
+
+Signed-off-by: Marcelo Tosatti <mtosatti@redhat.com>
+Signed-off-by: Eduardo Habkost <ehabkost@raisama.net>
+---
+ src/smp.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/smp.c b/src/smp.c
+index 38e117e..89c01f3 100644
+--- a/src/smp.c
++++ b/src/smp.c
+@@ -17,7 +17,7 @@
+ 
+ #define APIC_ENABLED 0x0100
+ 
+-struct { u32 ecx, eax, edx; } smp_mtrr[16] VAR16VISIBLE;
++struct { u32 ecx, eax, edx; } smp_mtrr[32] VAR16VISIBLE;
+ u32 smp_mtrr_count VAR16VISIBLE;
+ 
+ void
+-- 
+1.7.3.2
+

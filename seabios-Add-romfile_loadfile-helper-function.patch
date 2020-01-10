@@ -1,0 +1,152 @@
+From 4d060d51f59e0b08a673fbcec5677a70590bcbba Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:44 -0200
+Subject: [PATCH 06/29] Add romfile_loadfile() helper function.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-6-git-send-email-gleb@redhat.com>
+Patchwork-id: 16178
+O-Subject: [PATCH SEABIOS RHEL6.1 05/25] Add romfile_loadfile() helper function.
+Bugzilla: 643688
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Add function to find, malloc, and copy a romfile.  Use it in the
+bootsplash and bootorder code.
+
+Upstream commit: f9b0930
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/boot.c       |   18 ++----------------
+ src/bootsplash.c |   11 ++++-------
+ src/paravirt.c   |   27 +++++++++++++++++++++++++++
+ src/paravirt.h   |    1 +
+ 4 files changed, 34 insertions(+), 23 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c       |   18 ++----------------
+ src/bootsplash.c |   11 ++++-------
+ src/paravirt.c   |   27 +++++++++++++++++++++++++++
+ src/paravirt.h   |    1 +
+ 4 files changed, 34 insertions(+), 23 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 9c37023..4fb73ac 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -68,24 +68,10 @@ boot_setup(void)
+             IPL.checkfloppysig = 1;
+     }
+ 
+-    u32 file = romfile_find("bootorder");
+-    if (!file)
++    char *f = romfile_loadfile("bootorder", NULL);
++    if (!f)
+         return;
+ 
+-    int filesize = romfile_size(file);
+-    dprintf(3, "bootorder file found (len %d)\n", filesize);
+-
+-    if (filesize == 0)
+-        return;
+-
+-    char *f = malloc_tmphigh(filesize);
+-
+-    if (!f) {
+-        warn_noalloc();
+-        return;
+-    }
+-
+-    romfile_copy(file, f, filesize);
+     int i;
+     IPL.fw_bootorder_count = 1;
+     while(f[i]) {
+diff --git a/src/bootsplash.c b/src/bootsplash.c
+index 8f42dfd..cf1a603 100644
+--- a/src/bootsplash.c
++++ b/src/bootsplash.c
+@@ -149,17 +149,16 @@ enable_bootsplash(void)
+     if (!CONFIG_BOOTSPLASH)
+         return;
+     dprintf(3, "Checking for bootsplash\n");
+-    u32 file = romfile_find("bootsplash.jpg");
+-    if (!file)
++    int filesize;
++    u8 *filedata = romfile_loadfile("bootsplash.jpg", &filesize);
++    if (!filedata)
+         return;
+-    int filesize = romfile_size(file);
+ 
+     u8 *picture = NULL;
+-    u8 *filedata = malloc_tmphigh(filesize);
+     struct vesa_info *vesa_info = malloc_tmplow(sizeof(*vesa_info));
+     struct vesa_mode_info *mode_info = malloc_tmplow(sizeof(*mode_info));
+     struct jpeg_decdata *jpeg = jpeg_alloc();
+-    if (!filedata || !jpeg || !vesa_info || !mode_info) {
++    if (!jpeg || !vesa_info || !mode_info) {
+         warn_noalloc();
+         goto done;
+     }
+@@ -186,8 +185,6 @@ enable_bootsplash(void)
+             vendor, product);
+ 
+     // Parse jpeg and get image size.
+-    dprintf(5, "Copying bootsplash.jpg\n");
+-    romfile_copy(file, filedata, filesize);
+     dprintf(5, "Decoding bootsplash.jpg\n");
+     int ret = jpeg_decode(jpeg, filedata);
+     if (ret) {
+diff --git a/src/paravirt.c b/src/paravirt.c
+index 308c809..74d3743 100644
+--- a/src/paravirt.c
++++ b/src/paravirt.c
+@@ -365,3 +365,30 @@ int qemu_cfg_read_file(u32 select, void *dst, u32 maxlen)
+     qemu_cfg_read_entry(dst, select, len);
+     return len;
+ }
++
++// Helper function to find, malloc_tmphigh, and copy a romfile.  This
++// function adds a trailing zero to the malloc'd copy.
++void *
++romfile_loadfile(const char *name, int *psize)
++{
++    u32 file = romfile_find(name);
++    if (!file)
++        return NULL;
++
++    int filesize = romfile_size(file);
++    if (!filesize)
++        return NULL;
++
++    char *data = malloc_tmphigh(filesize+1);
++    if (!data) {
++        warn_noalloc();
++        return NULL;
++    }
++
++    dprintf(5, "Copying romfile '%s' (len %d)\n", name, filesize);
++    romfile_copy(file, data, filesize);
++    if (psize)
++        *psize = filesize;
++    data[filesize] = '\0';
++    return data;
++}
+diff --git a/src/paravirt.h b/src/paravirt.h
+index 99c473b..7bf34b1 100644
+--- a/src/paravirt.h
++++ b/src/paravirt.h
+@@ -100,6 +100,7 @@ static inline const char* romfile_name(u32 fileid) {
+         return cbfs_filename((void*)fileid);
+     return qemu_cfg_name_file(fileid);
+ }
++void *romfile_loadfile(const char *name, int *psize);
+ 
+ u32 qemu_cfg_e820_entries(void);
+ void* qemu_cfg_e820_load_next(void *addr);
+-- 
+1.7.4.rc1.16.gd2f15e
+

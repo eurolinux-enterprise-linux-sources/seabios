@@ -1,0 +1,88 @@
+From 3b43b1524cfd7f973d8ca450d60bd10534bae3b3 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:46 -0200
+Subject: [PATCH 08/29] Support qemu based romfile wrappers called out of order.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-8-git-send-email-gleb@redhat.com>
+Patchwork-id: 16168
+O-Subject: [PATCH SEABIOS RHEL6.1 07/25] Support qemu based romfile wrappers
+	called out of order.
+Bugzilla: 643688
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+If the file requested isn't the last file read, then reread the index
+to find the given file.
+
+Upstream commit: c6629e0
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/paravirt.c |   29 +++++++++++++++++++++++------
+ 1 files changed, 23 insertions(+), 6 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/paravirt.c |   29 +++++++++++++++++++++++------
+ 1 files changed, 23 insertions(+), 6 deletions(-)
+
+diff --git a/src/paravirt.c b/src/paravirt.c
+index 74d3743..09e3d23 100644
+--- a/src/paravirt.c
++++ b/src/paravirt.c
+@@ -338,26 +338,43 @@ u32 qemu_cfg_find_file(const char *name)
+     return __cfg_next_prefix_file(name, strlen(name) + 1, 0);
+ }
+ 
++static int
++__qemu_cfg_set_file(u32 select)
++{
++    if (!qemu_cfg_present || !select)
++        return -1;
++    if (select == ntohs(LastFile.select))
++        return 0;
++
++    u32 count;
++    qemu_cfg_read_entry(&count, QEMU_CFG_FILE_DIR, sizeof(count));
++    count = ntohl(count);
++    u32 e;
++    for (e = 0; e < count; e++) {
++        qemu_cfg_read((void*)&LastFile, sizeof(LastFile));
++        if (select == ntohs(LastFile.select))
++            return 0;
++    }
++    return -1;
++}
++
+ int qemu_cfg_size_file(u32 select)
+ {
+-    if (select != ntohs(LastFile.select))
++    if (__qemu_cfg_set_file(select))
+         return -1;
+     return ntohl(LastFile.size);
+ }
+ 
+-
+ const char* qemu_cfg_name_file(u32 select)
+ {
+-    if (select != ntohs(LastFile.select))
++    if (__qemu_cfg_set_file(select))
+         return NULL;
+     return LastFile.name;
+ }
+ 
+ int qemu_cfg_read_file(u32 select, void *dst, u32 maxlen)
+ {
+-    if (!qemu_cfg_present)
+-        return -1;
+-    if (!select || select != ntohs(LastFile.select))
++    if (__qemu_cfg_set_file(select))
+         return -1;
+     int len = qemu_cfg_size_file(select);
+     if (len < 0 || len > maxlen)
+-- 
+1.7.4.rc1.16.gd2f15e
+

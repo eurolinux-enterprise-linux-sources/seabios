@@ -1,0 +1,106 @@
+From 275305ad969c50d5ec040459d88f46716360463c Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:20:04 -0200
+Subject: [PATCH 26/29] Add support for finding the boot priority of USB drives.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-26-git-send-email-gleb@redhat.com>
+Patchwork-id: 16177
+O-Subject: [PATCH SEABIOS RHEL6.1 25/25] Add support for finding the boot
+	priority of USB drives.
+Bugzilla: 643688
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Use the device path of the USB device to find a bootorder entry.
+
+Upstream commit: c2002a1
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/boot.c    |   15 +++++++++++++++
+ src/boot.h    |    3 ++-
+ src/usb-msc.c |   10 ++++++++--
+ 3 files changed, 25 insertions(+), 3 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c    |   15 +++++++++++++++
+ src/boot.h    |    3 ++-
+ src/usb-msc.c |   10 ++++++++--
+ 3 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 2e2aea5..e5475a2 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -162,6 +162,21 @@ int bootprio_find_named_rom(const char *name, int instance)
+     return find_prio(desc);
+ }
+ 
++int bootprio_find_usb(int bdf, u64 path)
++{
++    // Find usb - for example: /pci@i0cf8/usb@1,2/hub@1/network@0/ethernet@0
++    int i;
++    char desc[256], *p;
++    p = build_pci_path(desc, sizeof(desc), "usb", bdf);
++    for (i=56; i>0; i-=8) {
++        int port = (path >> i) & 0xff;
++        if (port != 0xff)
++            p += snprintf(p, desc+sizeof(desc)-p, "/hub@%x", port);
++    }
++    snprintf(p, desc+sizeof(desc)-p, "/*@%x", (u32)(path & 0xff));
++    return find_prio(desc);
++}
++
+ 
+ /****************************************************************
+  * Boot setup
+diff --git a/src/boot.h b/src/boot.h
+index 8f56ccf..62f4b2b 100644
+--- a/src/boot.h
++++ b/src/boot.h
+@@ -15,8 +15,9 @@ void boot_add_cbfs(void *data, const char *desc, int prio);
+ void boot_prep(void);
+ int bootprio_find_pci_device(int bdf);
+ int bootprio_find_ata_device(int bdf, int chanid, int slave);
+-int bootprio_find_fdc_device(int bfd, int port, int fdid);
++int bootprio_find_fdc_device(int bdf, int port, int fdid);
+ int bootprio_find_pci_rom(int bdf, int instance);
+ int bootprio_find_named_rom(const char *name, int instance);
++int bootprio_find_usb(int bdf, u64 path);
+ 
+ #endif // __BOOT_H
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index 5c3ac94..a8e92ef 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -140,7 +140,10 @@ setup_drive_cdrom(struct disk_op_s *op, char *desc)
+ {
+     op->drive_g->blksize = CDROM_SECTOR_SIZE;
+     op->drive_g->sectors = (u64)-1;
+-    boot_add_cd(op->drive_g, desc, -1);
++    struct usb_pipe *pipe = container_of(
++        op->drive_g, struct usbdrive_s, drive)->bulkout;
++    int prio = bootprio_find_usb(pipe->cntl->bdf, pipe->path);
++    boot_add_cd(op->drive_g, desc, prio);
+     return 0;
+ }
+ 
+@@ -165,7 +168,10 @@ setup_drive_hd(struct disk_op_s *op, char *desc)
+     dprintf(1, "USB MSC blksize=%d sectors=%d\n", blksize, sectors);
+ 
+     // Register with bcv system.
+-    boot_add_hd(op->drive_g, desc, -1);
++    struct usb_pipe *pipe = container_of(
++        op->drive_g, struct usbdrive_s, drive)->bulkout;
++    int prio = bootprio_find_usb(pipe->cntl->bdf, pipe->path);
++    boot_add_hd(op->drive_g, desc, prio);
+ 
+     return 0;
+ }
+-- 
+1.7.4.rc1.16.gd2f15e
+

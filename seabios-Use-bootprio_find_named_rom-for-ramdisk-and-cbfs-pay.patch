@@ -1,0 +1,74 @@
+From 9e12536dd5b7064fd50fad767ee499d85f77f0c0 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:20:01 -0200
+Subject: [PATCH 23/29] Use bootprio_find_named_rom() for ramdisk and cbfs payload priorities.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-23-git-send-email-gleb@redhat.com>
+Patchwork-id: 16191
+O-Subject: [PATCH SEABIOS RHEL6.1 22/25] Use bootprio_find_named_rom() for
+	ramdisk and cbfs payload priorities.
+Bugzilla: 643688
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Upstream commit: c4bd3b9
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/coreboot.c |    2 +-
+ src/ramdisk.c  |    9 +++++----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/coreboot.c |    2 +-
+ src/ramdisk.c  |    9 +++++----
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/src/coreboot.c b/src/coreboot.c
+index 5bc64dd..b95f966 100644
+--- a/src/coreboot.c
++++ b/src/coreboot.c
+@@ -611,7 +611,7 @@ register_cbfs_payload(void)
+             break;
+         const char *filename = cbfs_filename(file);
+         char *desc = znprintf(MAXDESCSIZE, "Payload [%s]", &filename[4]);
+-        boot_add_cbfs(file, desc, -1);
++        boot_add_cbfs(file, desc, bootprio_find_named_rom(filename, 0));
+     }
+ }
+ 
+diff --git a/src/ramdisk.c b/src/ramdisk.c
+index 5391376..bae30e2 100644
+--- a/src/ramdisk.c
++++ b/src/ramdisk.c
+@@ -21,8 +21,9 @@ ramdisk_setup(void)
+     struct cbfs_file *file = cbfs_findprefix("floppyimg/", NULL);
+     if (!file)
+         return;
++    const char *filename = cbfs_filename(file);
+     u32 size = cbfs_datasize(file);
+-    dprintf(3, "Found floppy file %s of size %d\n", cbfs_filename(file), size);
++    dprintf(3, "Found floppy file %s of size %d\n", filename, size);
+     int ftype = find_floppy_type(size);
+     if (ftype < 0) {
+         dprintf(3, "No floppy type found for ramdisk size\n");
+@@ -45,9 +46,9 @@ ramdisk_setup(void)
+     if (!drive_g)
+         return;
+     drive_g->type = DTYPE_RAMDISK;
+-    dprintf(1, "Mapping CBFS floppy %s to addr %p\n", cbfs_filename(file), pos);
+-    char *desc = znprintf(MAXDESCSIZE, "Ramdisk [%s]", cbfs_filename(file));
+-    boot_add_floppy(drive_g, desc, -1);
++    dprintf(1, "Mapping CBFS floppy %s to addr %p\n", filename, pos);
++    char *desc = znprintf(MAXDESCSIZE, "Ramdisk [%s]", &filename[10]);
++    boot_add_floppy(drive_g, desc, bootprio_find_named_rom(filename, 0));
+ }
+ 
+ static int
+-- 
+1.7.4.rc1.16.gd2f15e
+

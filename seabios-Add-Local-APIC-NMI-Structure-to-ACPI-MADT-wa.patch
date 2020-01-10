@@ -1,0 +1,85 @@
+From 180bc84d3f144cb675aa3b69728b5d705abede81 Mon Sep 17 00:00:00 2001
+From: Avi Kivity <avi@redhat.com>
+Date: Mon, 31 Oct 2011 10:16:11 +0100
+Subject: [PATCH 1/2] seabios: Add Local APIC NMI Structure to ACPI MADT (was:
+ Re: [Qemu-devel] [PATCH] qemu: Fix inject-nmi)
+
+RH-Author: Avi Kivity <avi@redhat.com>
+Message-id: <1320056172-32069-2-git-send-email-avi@redhat.com>
+Patchwork-id: 34762
+O-Subject: [PATCH RHEL6.2 seabios 1/2] seabios: Add Local APIC NMI Structure to ACPI MADT (was: Re: [Qemu-devel] [PATCH] qemu: Fix inject-nmi)
+Bugzilla: 750191
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Amos Kong <akong@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+
+From: Kenji Kaneshige <kaneshige.kenji@jp.fujitsu.com>
+
+Bugzilla: 750191
+Upstream: 7098638930d8
+
+ACPI NMI Structure describes LINT pin (LINT0 or LINT1) information to
+which NMI is connected, and it is needed by OS to initialize local APIC.
+
+Signed-off-by: Kenji Kaneshige <kaneshige.kenji@jp.fujitsu.com>
+Reviewed-by: Lai Jiangshan <laijs@cn.fujitsu.com>
+Signed-off-by: Avi Kivity <avi@redhat.com>
+---
+ src/acpi.c |   22 ++++++++++++++++++++--
+ 1 files changed, 20 insertions(+), 2 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/acpi.c |   22 ++++++++++++++++++++--
+ 1 files changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/src/acpi.c b/src/acpi.c
+index 4326bae..374487d 100644
+--- a/src/acpi.c
++++ b/src/acpi.c
+@@ -135,6 +135,14 @@ struct madt_intsrcovr {
+     u16 flags;
+ } PACKED;
+ 
++struct madt_local_nmi {
++    ACPI_SUB_HEADER_DEF
++    u8  processor_id;           /* ACPI processor id */
++    u16 flags;                  /* MPS INTI flags */
++    u8  lint;                   /* Local APIC LINT# */
++} PACKED;
++
++
+ /*
+  * ACPI 2.0 Generic Address Space definition.
+  */
+@@ -273,7 +281,9 @@ build_madt(void)
+     int madt_size = (sizeof(struct multiple_apic_table)
+                      + sizeof(struct madt_processor_apic) * MaxCountCPUs
+                      + sizeof(struct madt_io_apic)
+-                     + sizeof(struct madt_intsrcovr) * 16);
++                     + sizeof(struct madt_intsrcovr) * 16
++                     + sizeof(struct madt_local_nmi));
++
+     struct multiple_apic_table *madt = malloc_high(madt_size);
+     if (!madt) {
+         warn_noalloc();
+@@ -325,7 +335,15 @@ build_madt(void)
+         intsrcovr++;
+     }
+ 
+-    build_header((void*)madt, APIC_SIGNATURE, (void*)intsrcovr - (void*)madt, 1);
++    struct madt_local_nmi *local_nmi = (void*)intsrcovr;
++    local_nmi->type         = APIC_LOCAL_NMI;
++    local_nmi->length       = sizeof(*local_nmi);
++    local_nmi->processor_id = 0xff; /* all processors */
++    local_nmi->flags        = 0;
++    local_nmi->lint         = 1; /* LINT1 */
++    local_nmi++;
++
++    build_header((void*)madt, APIC_SIGNATURE, (void*)local_nmi - (void*)madt, 1);
+     return madt;
+ }
+ 
+-- 
+1.7.4.4
+

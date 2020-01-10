@@ -1,0 +1,72 @@
+From e1f5490671d78ce555739b754e8378a3bc37742b Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 14 Sep 2011 11:50:38 +0200
+Subject: [PATCH] usb: move hid initialization
+
+RH-Author: Gerd Hoffmann <kraxel@redhat.com>
+Message-id: <1316001038-3505-1-git-send-email-kraxel@redhat.com>
+Patchwork-id: 32753
+O-Subject: [RHEL-6 seabios PATCH] usb: move hid initialization
+Bugzilla: 733028
+RH-Acked-by: Hans de Goede <hdegoede@redhat.com>
+RH-Acked-by: Kevin Wolf <kwolf@redhat.com>
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+
+Reinitialization (of the usb hid devices (which is just zeroing global
+variables) must be done earlier in the boot process, specifically before
+seabios sets up timers.  Otherwise the usb keyboard poll (called from
+timer irq) may process bogous data after reboot.
+
+bugzilla: 733028 -- Failed to reboot guest due to "key event queue full"
+upstream: fixed hard-rebooting the machine unconditionally,
+          which will clear all global variables (see commit
+          4d96edc76ba1e7556700908c10cb0e257cce5573).
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ src/post.c |    2 ++
+ src/usb.c  |    2 --
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/post.c |    2 ++
+ src/usb.c  |    2 --
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/post.c b/src/post.c
+index 5d0e2cb..5b08f5a 100644
+--- a/src/post.c
++++ b/src/post.c
+@@ -20,6 +20,7 @@
+ #include "mptable.h" // mptable_init
+ #include "boot.h" // IPL
+ #include "usb.h" // usb_setup
++#include "usb-hid.h" // usb_hid_setup
+ #include "smbios.h" // smbios_init
+ #include "paravirt.h" // qemu_cfg_port_probe
+ #include "ps2port.h" // ps2port_setup
+@@ -189,6 +190,7 @@ post(void)
+     ram_probe();
+     malloc_setup();
+     thread_setup();
++    usb_hid_setup();
+ 
+     // Init base pc hardware.
+     pic_setup();
+diff --git a/src/usb.c b/src/usb.c
+index 5e3e97a..7a4281a 100644
+--- a/src/usb.c
++++ b/src/usb.c
+@@ -427,8 +427,6 @@ usb_setup(void)
+ 
+     dprintf(3, "init usb\n");
+ 
+-    usb_hid_setup();
+-
+     // Look for USB controllers
+     int ehcibdf = -1;
+     int count = 0;
+-- 
+1.7.4.4
+

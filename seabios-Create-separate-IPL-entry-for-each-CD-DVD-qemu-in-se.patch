@@ -1,0 +1,202 @@
+From 5b0f67b6122c26f53b52f32ab05642611d4c32ec Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 13:57:47 -0200
+Subject: [PATCH 01/29] Create separate IPL entry for each CD/DVD qemu in seabios
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20110112135747.GF14750@redhat.com>
+Patchwork-id: 16200
+O-Subject: [PATCH SEABIOS RHEL6.1 00/25] Create separate IPL entry for each
+	CD/DVD qemu in seabios
+Bugzilla: 643688
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+Current code creates only one IPL entry of type IPL_TYPE_CDROM even if
+there are more then one CDROM drive present. If CDROM that the entry
+refers to is not bootable there is no way to retry boot from another
+CDROM. Fix this by creating IPL entry for each CDROM drive found. First
+CDROM will always be placed in IPL entry 3 for backwards compatibility.
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+
+Upstream commit: 4c90a20
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+
+Forgot to send this patch initially.
+
+--
+			Gleb.
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/ata.c   |    4 +++-
+ src/block.c |   10 ++++++++++
+ src/boot.c  |   39 +++++++++++++++++++++++++++++++--------
+ src/boot.h  |    2 ++
+ src/cdrom.c |    7 ++++---
+ src/disk.h  |    3 ++-
+ 6 files changed, 52 insertions(+), 13 deletions(-)
+
+diff --git a/src/ata.c b/src/ata.c
+index e9a8df7..440efc8 100644
+--- a/src/ata.c
++++ b/src/ata.c
+@@ -778,8 +778,10 @@ init_drive_atapi(struct atadrive_s *dummy, u16 *buffer)
+     dprintf(1, "%s\n", adrive_g->drive.desc);
+ 
+     // fill cdidmap
+-    if (iscd)
++    if (iscd) {
+         map_cd_drive(&adrive_g->drive);
++        add_baid_cdrom(&adrive_g->drive);
++    }
+ 
+     return adrive_g;
+ }
+diff --git a/src/block.c b/src/block.c
+index b6b1902..6d620b7 100644
+--- a/src/block.c
++++ b/src/block.c
+@@ -26,6 +26,16 @@ getDrive(u8 exttype, u8 extdriveoffset)
+     return GLOBALFLAT2GLOBAL(drive_gf);
+ }
+ 
++int getDriveId(u8 exttype, struct drive_s *drive_g)
++{
++    int i;
++
++    for (i = 0; i < ARRAY_SIZE(Drives.idmap[0]); i++)
++        if (getDrive(exttype, i) == drive_g)
++            return i;
++
++    return -1;
++}
+ 
+ /****************************************************************
+  * Disk geometry translation
+diff --git a/src/boot.c b/src/boot.c
+index 021b8ac..9c94439 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -87,6 +87,25 @@ add_bev(u16 seg, u16 bev, u16 desc)
+     ie->description = d;
+ }
+ 
++// Add a IPL entry for BAID cdrom.
++void
++add_baid_cdrom(struct drive_s *drive_g)
++{
++    if (! CONFIG_CDROM_BOOT)
++        return;
++
++    /* put first cdrom into ipl 3 for compatability with qemu */
++    struct ipl_entry_s *ie = &IPL.bev[2];
++    if (IPL.bevcount >= ARRAY_SIZE(IPL.bev) && ie->vector)
++        return;
++
++    if (ie->vector)
++        ie = &IPL.bev[IPL.bevcount++];
++    ie->type = IPL_TYPE_CDROM;
++    ie->vector = (u32)drive_g;
++    ie->description = "DVD/CD";
++}
++
+ // Add a bcv entry for an expansion card harddrive or legacy option rom
+ void
+ add_bcv(u16 seg, u16 ip, u16 desc)
+@@ -188,12 +207,11 @@ menu_show_harddisk(struct ipl_entry_s *ie, int menupos)
+ static int
+ menu_show_cdrom(struct ipl_entry_s *ie, int menupos)
+ {
+-    int i;
+-    for (i = 0; i < Drives.cdcount; i++) {
+-        struct drive_s *drive_g = getDrive(EXTTYPE_CD, i);
+-        printf("%d. DVD/CD [%s]\n", menupos + i, drive_g->desc);
+-    }
+-    return Drives.cdcount;
++    struct drive_s *drive_g = (void*)ie->vector;
++    if (!ie->vector)
++        return 0;
++    printf("%d. DVD/CD [%s]\n", menupos, drive_g->desc);
++    return 1;
+ }
+ 
+ // Show coreboot-fs menu item.
+@@ -399,9 +417,14 @@ boot_cdrom(struct ipl_entry_s *ie)
+ {
+     if (! CONFIG_CDROM_BOOT)
+         return;
+-    int status = cdrom_boot(ie->subchoice);
++
++    if (!ie->vector)
++        return;
++
++    struct drive_s *drive_g = (void*)ie->vector;
++    int status = cdrom_boot(drive_g);
+     if (status) {
+-        printf("Boot failed: Could not read from CDROM (code %04x)\n", status);
++        printf("Boot failed: Could not read from CDROM %s (code %04x)\n", drive_g->desc, status);
+         return;
+     }
+ 
+diff --git a/src/boot.h b/src/boot.h
+index db046e3..f751d71 100644
+--- a/src/boot.h
++++ b/src/boot.h
+@@ -43,6 +43,8 @@ void add_bev(u16 seg, u16 bev, u16 desc);
+ void add_bcv(u16 seg, u16 ip, u16 desc);
+ struct drive_s;
+ void add_bcv_internal(struct drive_s *drive_g);
++void add_baid_cdrom(struct drive_s *drive_g);
++
+ void boot_prep(void);
+ 
+ #endif // __BOOT_H
+diff --git a/src/cdrom.c b/src/cdrom.c
+index 655ee00..943a8d1 100644
+--- a/src/cdrom.c
++++ b/src/cdrom.c
+@@ -243,12 +243,13 @@ atapi_is_ready(struct disk_op_s *op)
+ }
+ 
+ int
+-cdrom_boot(int cdid)
++cdrom_boot(struct drive_s *drive_g)
+ {
+     struct disk_op_s dop;
++    int cdid = getDriveId(EXTTYPE_CD, drive_g);
+     memset(&dop, 0, sizeof(dop));
+-    dop.drive_g = getDrive(EXTTYPE_CD, cdid);
+-    if (!dop.drive_g)
++    dop.drive_g = drive_g;
++    if (!dop.drive_g || cdid < 0)
+         return 1;
+ 
+     int ret = atapi_is_ready(&dop);
+diff --git a/src/disk.h b/src/disk.h
+index 9e5b083..cb3f993 100644
+--- a/src/disk.h
++++ b/src/disk.h
+@@ -228,6 +228,7 @@ struct drives_s {
+ // block.c
+ extern struct drives_s Drives;
+ struct drive_s *getDrive(u8 exttype, u8 extdriveoffset);
++int getDriveId(u8 exttype, struct drive_s *drive_g);
+ void setup_translation(struct drive_s *drive_g);
+ void map_floppy_drive(struct drive_s *drive_g);
+ void map_hd_drive(struct drive_s *drive_g);
+@@ -249,7 +250,7 @@ extern struct drive_s *cdemu_drive_gf;
+ int process_cdemu_op(struct disk_op_s *op);
+ void cdemu_setup(void);
+ void cdemu_134b(struct bregs *regs);
+-int cdrom_boot(int cdid);
++int cdrom_boot(struct drive_s *drive_g);
+ 
+ // ramdisk.c
+ void ramdisk_setup(void);
+-- 
+1.7.4.rc1.16.gd2f15e
+

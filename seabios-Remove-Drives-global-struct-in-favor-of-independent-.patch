@@ -1,0 +1,177 @@
+From 9b181875d9c984cca41701f13691b33637d511ca Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:55 -0200
+Subject: [PATCH 17/29] Remove Drives global struct in favor of independent global variables.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-17-git-send-email-gleb@redhat.com>
+Patchwork-id: 16171
+O-Subject: [PATCH SEABIOS RHEL6.1 16/25] Remove Drives global struct in favor of
+	independent global variables.
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+The "Drives" struct just held three global variables - declare the
+three global variables independently.
+
+Upstream commit: a0842f8
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/block.c |   23 ++++++++++++-----------
+ src/cdrom.c |    2 +-
+ src/disk.c  |    2 +-
+ src/disk.h  |    9 +--------
+ 4 files changed, 15 insertions(+), 21 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/block.c |   23 ++++++++++++-----------
+ src/cdrom.c |    2 +-
+ src/disk.c  |    2 +-
+ src/disk.h  |    9 +--------
+ 4 files changed, 15 insertions(+), 21 deletions(-)
+
+diff --git a/src/block.c b/src/block.c
+index 36a6607..26dd0bc 100644
+--- a/src/block.c
++++ b/src/block.c
+@@ -13,14 +13,16 @@
+ #include "usb-msc.h" // process_usb_op
+ #include "virtio-blk.h" // process_virtio_op
+ 
+-struct drives_s Drives VAR16VISIBLE;
++u8 FloppyCount VAR16VISIBLE;
++u8 CDCount;
++struct drive_s *IDMap[3][CONFIG_MAX_EXTDRIVE] VAR16VISIBLE;
+ 
+ struct drive_s *
+ getDrive(u8 exttype, u8 extdriveoffset)
+ {
+-    if (extdriveoffset >= ARRAY_SIZE(Drives.idmap[0]))
++    if (extdriveoffset >= ARRAY_SIZE(IDMap[0]))
+         return NULL;
+-    struct drive_s *drive_gf = GET_GLOBAL(Drives.idmap[exttype][extdriveoffset]);
++    struct drive_s *drive_gf = GET_GLOBAL(IDMap[exttype][extdriveoffset]);
+     if (!drive_gf)
+         return NULL;
+     return GLOBALFLAT2GLOBAL(drive_gf);
+@@ -29,7 +31,7 @@ getDrive(u8 exttype, u8 extdriveoffset)
+ int getDriveId(u8 exttype, struct drive_s *drive_g)
+ {
+     int i;
+-    for (i = 0; i < ARRAY_SIZE(Drives.idmap[0]); i++)
++    for (i = 0; i < ARRAY_SIZE(IDMap[0]); i++)
+         if (getDrive(exttype, i) == drive_g)
+             return i;
+     return -1;
+@@ -202,7 +204,7 @@ fill_fdpt(struct drive_s *drive_g, int hdid)
+ static void
+ add_drive(struct drive_s **idmap, u8 *count, struct drive_s *drive_g)
+ {
+-    if (*count >= ARRAY_SIZE(Drives.idmap[0])) {
++    if (*count >= ARRAY_SIZE(IDMap[0])) {
+         warn_noalloc();
+         return;
+     }
+@@ -218,7 +220,7 @@ map_hd_drive(struct drive_s *drive_g)
+     struct bios_data_area_s *bda = MAKE_FLATPTR(SEG_BDA, 0);
+     int hdid = bda->hdcount;
+     dprintf(3, "Mapping hd drive %p to %d\n", drive_g, hdid);
+-    add_drive(Drives.idmap[EXTTYPE_HD], &bda->hdcount, drive_g);
++    add_drive(IDMap[EXTTYPE_HD], &bda->hdcount, drive_g);
+ 
+     // Setup disk geometry translation.
+     setup_translation(drive_g);
+@@ -232,7 +234,7 @@ void
+ map_cd_drive(struct drive_s *drive_g)
+ {
+     dprintf(3, "Mapping cd drive %p\n", drive_g);
+-    add_drive(Drives.idmap[EXTTYPE_CD], &Drives.cdcount, drive_g);
++    add_drive(IDMap[EXTTYPE_CD], &CDCount, drive_g);
+ }
+ 
+ // Map a floppy
+@@ -240,14 +242,14 @@ void
+ map_floppy_drive(struct drive_s *drive_g)
+ {
+     dprintf(3, "Mapping floppy drive %p\n", drive_g);
+-    add_drive(Drives.idmap[EXTTYPE_FLOPPY], &Drives.floppycount, drive_g);
++    add_drive(IDMap[EXTTYPE_FLOPPY], &FloppyCount, drive_g);
+ 
+     // Update equipment word bits for floppy
+-    if (Drives.floppycount == 1) {
++    if (FloppyCount == 1) {
+         // 1 drive, ready for boot
+         SETBITS_BDA(equipment_list_flags, 0x01);
+         SET_BDA(floppy_harddisk_info, 0x07);
+-    } else if (Drives.floppycount >= 2) {
++    } else if (FloppyCount >= 2) {
+         // 2 drives, ready for boot
+         SETBITS_BDA(equipment_list_flags, 0x41);
+         SET_BDA(floppy_harddisk_info, 0x77);
+@@ -326,5 +328,4 @@ send_disk_op(struct disk_op_s *op)
+ void
+ drive_setup(void)
+ {
+-    memset(&Drives, 0, sizeof(Drives));
+ }
+diff --git a/src/cdrom.c b/src/cdrom.c
+index 943a8d1..1f513df 100644
+--- a/src/cdrom.c
++++ b/src/cdrom.c
+@@ -111,7 +111,7 @@ cdemu_setup(void)
+         return;
+     cdemu_drive_gf = NULL;
+     cdemu_buf_fl = NULL;
+-    if (!Drives.cdcount)
++    if (!CDCount)
+         return;
+ 
+     struct drive_s *drive_g = malloc_fseg(sizeof(*drive_g));
+diff --git a/src/disk.c b/src/disk.c
+index 56c369a..f7bfe9c 100644
+--- a/src/disk.c
++++ b/src/disk.c
+@@ -235,7 +235,7 @@ disk_1308(struct bregs *regs, struct drive_s *drive_g)
+     u8 count;
+     if (regs->dl < EXTSTART_HD) {
+         // Floppy
+-        count = GET_GLOBAL(Drives.floppycount);
++        count = GET_GLOBAL(FloppyCount);
+ 
+         if (CONFIG_CDROM_EMU
+             && drive_g == GLOBALFLAT2GLOBAL(GET_GLOBAL(cdemu_drive_gf)))
+diff --git a/src/disk.h b/src/disk.h
+index 0abebf7..9809d38 100644
+--- a/src/disk.h
++++ b/src/disk.h
+@@ -206,13 +206,6 @@ struct drive_s {
+ #define TRANSLATION_LARGE 2
+ #define TRANSLATION_RECHS 3
+ 
+-struct drives_s {
+-    // map between bios floppy/hd/cd id and drive_s struct
+-    u8 floppycount;
+-    u8 cdcount;
+-    struct drive_s *idmap[3][CONFIG_MAX_EXTDRIVE];
+-};
+-
+ #define EXTTYPE_FLOPPY 0
+ #define EXTTYPE_HD 1
+ #define EXTTYPE_CD 2
+@@ -226,7 +219,7 @@ struct drives_s {
+  ****************************************************************/
+ 
+ // block.c
+-extern struct drives_s Drives;
++extern u8 FloppyCount, CDCount;
+ struct drive_s *getDrive(u8 exttype, u8 extdriveoffset);
+ int getDriveId(u8 exttype, struct drive_s *drive_g);
+ void map_floppy_drive(struct drive_s *drive_g);
+-- 
+1.7.4.rc1.16.gd2f15e
+

@@ -1,0 +1,70 @@
+From c295c7a41fd71eb6d7c9867541fe68bb3b6b27a7 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Thu, 13 Jan 2011 14:27:24 -0200
+Subject: [PATCH 27/29] re-nitialize global variables on reboot
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20110113142724.GK14750@redhat.com>
+Patchwork-id: 16286
+O-Subject: Re: [PATCH SEABIOS RHEL6.1 16/25] Remove Drives global struct in
+	favor of independent global variables.
+Bugzilla: 643688
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+So without the patch below reboot does not work with the series applied.
+Rebasing to HEAD is also not an option since Seabios HEAD relies on
+some qemu-kvm fixes that will also have to be backported to RHEL6 and I
+do not want to go there. We can apply this patch on top of the series
+(much easier for reviewers), or we can fold each initialization to where
+variable were introduced (harder to review, requires resend of the patch
+deries).
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index e5475a2..826de37 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -191,12 +191,16 @@ static int DefaultCDPrio     = 102;
+ static int DefaultHDPrio     = 103;
+ static int DefaultBEVPrio    = 104;
+ 
++static void boot_init(void);
++
+ void
+ boot_setup(void)
+ {
+     if (! CONFIG_BOOT)
+         return;
+ 
++    boot_init();
++
+     SET_EBDA(boot_sequence, 0xffff);
+ 
+     if (!CONFIG_COREBOOT) {
+@@ -426,6 +430,17 @@ add_bev(int type, u32 vector)
+     bev->vector = vector;
+ }
+ 
++static void boot_init(void)
++{
++    CheckFloppySig = 1;
++    DefaultFloppyPrio = 101;
++    DefaultCDPrio     = 102;
++    DefaultHDPrio     = 103;
++    DefaultBEVPrio    = 104;
++    BootList = NULL;
++    BEVCount = HaveHDBoot = HaveFDBoot = 0;
++}
++
+ // Prepare for boot - show menu and run bcvs.
+ void
+ boot_prep(void)
+-- 
+1.7.4.rc1.16.gd2f15e
+

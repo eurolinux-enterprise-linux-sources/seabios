@@ -1,0 +1,79 @@
+From fdff6393fb805f073496c4af7f5f750ef2464c8c Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:53 -0200
+Subject: [PATCH 15/29] Simplify keyboard reading code in the interactive boot menu.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-15-git-send-email-gleb@redhat.com>
+Patchwork-id: 16169
+O-Subject: [PATCH SEABIOS RHEL6.1 14/25] Simplify keyboard reading code in the
+	interactive boot menu.
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Upstream commit: 551caa2
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/boot.c |   32 ++++++++++++++++----------------
+ 1 files changed, 16 insertions(+), 16 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c |   32 ++++++++++++++++----------------
+ 1 files changed, 16 insertions(+), 16 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index d37e10f..a93bb5f 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -275,27 +275,27 @@ interactive_bootmenu(void)
+         pos = pos->next;
+     }
+ 
++    // Get key press
+     for (;;) {
+         scan_code = get_keystroke(1000);
+-        if (scan_code == 0x01)
+-            // ESC
++        if (scan_code >= 1 && scan_code <= maxmenu+1)
+             break;
+-        if (scan_code < 1 || scan_code > maxmenu+1)
+-            continue;
+-        int choice = scan_code - 1;
+-
+-        // Find entry and make top priority.
+-        struct bootentry_s **pprev = &BootList;
+-        while (--choice)
+-            pprev = &(*pprev)->next;
+-        pos = *pprev;
+-        *pprev = pos->next;
+-        pos->next = BootList;
+-        BootList = pos;
+-        pos->priority = 0;
+-        break;
+     }
+     printf("\n");
++    if (scan_code == 0x01)
++        // ESC
++        return;
++
++    // Find entry and make top priority.
++    int choice = scan_code - 1;
++    struct bootentry_s **pprev = &BootList;
++    while (--choice)
++        pprev = &(*pprev)->next;
++    pos = *pprev;
++    *pprev = pos->next;
++    pos->next = BootList;
++    BootList = pos;
++    pos->priority = 0;
+ }
+ 
+ static int HaveHDBoot, HaveFDBoot;
+-- 
+1.7.4.rc1.16.gd2f15e
+

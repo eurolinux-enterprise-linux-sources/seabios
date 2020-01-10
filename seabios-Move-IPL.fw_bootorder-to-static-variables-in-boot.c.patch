@@ -1,0 +1,109 @@
+From 54ffbb8f718eee7a37d8915ac91d08bc207064ac Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:58 -0200
+Subject: [PATCH 20/29] Move IPL.fw_bootorder to static variables in boot.c.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-20-git-send-email-gleb@redhat.com>
+Patchwork-id: 16185
+O-Subject: [PATCH SEABIOS RHEL6.1 19/25] Move IPL.fw_bootorder to static
+	variables in boot.c.
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Upstream commit: 3da2c1c
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/boot.c |   17 +++++++++--------
+ src/boot.h |   10 ----------
+ 2 files changed, 9 insertions(+), 18 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c |   17 +++++++++--------
+ src/boot.h |   10 ----------
+ 2 files changed, 9 insertions(+), 18 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 5ae418c..9a395c6 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -14,13 +14,14 @@
+ #include "cmos.h" // inb_cmos
+ #include "paravirt.h"
+ 
+-struct ipl_s IPL;
+-
+ 
+ /****************************************************************
+  * Boot priority ordering
+  ****************************************************************/
+ 
++static char **Bootorder;
++static int BootorderCount;
++
+ static void
+ loadBootOrder(void)
+ {
+@@ -29,14 +30,14 @@ loadBootOrder(void)
+         return;
+ 
+     int i;
+-    IPL.fw_bootorder_count = 1;
++    BootorderCount = 1;
+     while (f[i]) {
+         if (f[i] == '\n')
+-            IPL.fw_bootorder_count++;
++            BootorderCount++;
+         i++;
+     }
+-    IPL.fw_bootorder = malloc_tmphigh(IPL.fw_bootorder_count*sizeof(char*));
+-    if (!IPL.fw_bootorder) {
++    Bootorder = malloc_tmphigh(BootorderCount*sizeof(char*));
++    if (!Bootorder) {
+         warn_noalloc();
+         free(f);
+         return;
+@@ -45,12 +46,12 @@ loadBootOrder(void)
+     dprintf(3, "boot order:\n");
+     i = 0;
+     do {
+-        IPL.fw_bootorder[i] = f;
++        Bootorder[i] = f;
+         f = strchr(f, '\n');
+         if (f) {
+             *f = '\0';
+             f++;
+-            dprintf(3, "%d: %s\n", i, IPL.fw_bootorder[i]);
++            dprintf(3, "%d: %s\n", i, Bootorder[i]);
+             i++;
+         }
+     } while(f);
+diff --git a/src/boot.h b/src/boot.h
+index 94b175d..107594b 100644
+--- a/src/boot.h
++++ b/src/boot.h
+@@ -2,16 +2,6 @@
+ #ifndef __BOOT_H
+ #define __BOOT_H
+ 
+-struct ipl_s {
+-    char **fw_bootorder;
+-    int fw_bootorder_count;
+-};
+-
+-
+-/****************************************************************
+- * Function defs
+- ****************************************************************/
+-
+ // boot.c
+ extern struct ipl_s IPL;
+ void boot_setup(void);
+-- 
+1.7.4.rc1.16.gd2f15e
+

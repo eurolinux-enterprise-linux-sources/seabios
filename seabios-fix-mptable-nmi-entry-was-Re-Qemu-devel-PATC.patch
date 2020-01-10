@@ -1,0 +1,53 @@
+From 664f27f9fbeb42946e0cf1a8b4d7bb85c8c0f30f Mon Sep 17 00:00:00 2001
+From: Avi Kivity <avi@redhat.com>
+Date: Mon, 31 Oct 2011 10:16:12 +0100
+Subject: [PATCH 2/2] seabios: fix mptable nmi entry (was: Re: [Qemu-devel]
+ [PATCH] qemu: Fix inject-nmi)
+
+RH-Author: Avi Kivity <avi@redhat.com>
+Message-id: <1320056172-32069-3-git-send-email-avi@redhat.com>
+Patchwork-id: 34761
+O-Subject: [PATCH RHEL6.2 seabios 2/2] seabios: fix mptable nmi entry (was: Re: [Qemu-devel] [PATCH] qemu: Fix inject-nmi)
+Bugzilla: 750191
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Amos Kong <akong@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+
+From: Kenji Kaneshige <kaneshige.kenji@jp.fujitsu.com>
+
+Bugzilla: 750191
+Upstream: 55e28a48f0bd9
+
+In the current seabios MP table description, NMI is connected only to
+BSP's LINT1. But usually NMI is connected to all the CPUs' LINT1 as
+indicated in MP specification. This patch changes seabios MP table to
+describe NMI is connected to all the CPUs' LINT1.
+
+Signed-off-by: Kenji Kaneshige <kaneshige.kenji@jp.fujitsu.com>
+Reviewed-by: Lai Jiangshan <laijs@cn.fujitsu.com>
+Signed-off-by: Avi Kivity <avi@redhat.com>
+---
+ src/mptable.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+Signed-off-by: Michal Novotny <minovotn@redhat.com>
+---
+ src/mptable.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/mptable.c b/src/mptable.c
+index e5952c3..cca3117 100644
+--- a/src/mptable.c
++++ b/src/mptable.c
+@@ -167,7 +167,7 @@ mptable_init(void)
+     intsrc->irqflag = 0; /* PO, EL default */
+     intsrc->srcbus = isabusid; /* ISA */
+     intsrc->srcbusirq = 0;
+-    intsrc->dstapic = 0; /* BSP == APIC #0 */
++    intsrc->dstapic = 0xff; /* to all local APICs */
+     intsrc->dstirq = 1; /* LINTIN1 */
+     intsrc++;
+     entrycount += intsrc - intsrcs;
+-- 
+1.7.4.4
+

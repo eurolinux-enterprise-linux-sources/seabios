@@ -1,0 +1,888 @@
+From fc0144b75979f8f479c131011a365ee765da40e9 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:49 -0200
+Subject: [PATCH 11/29] Simplify boot ordering by building an inclusive boot list.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-11-git-send-email-gleb@redhat.com>
+Patchwork-id: 16181
+O-Subject: [PATCH SEABIOS RHEL6.1 10/25] Simplify boot ordering by building an
+	inclusive boot list.
+Bugzilla: 643688
+RH-Acked-by: Alex Williamson <alex.williamson@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Replace the bcv list with a full list of all "bootable objects".  All
+ordering can then be done on this list.  The final boot menu, drive
+mapping, and BEV list generation is then driven from this
+authoritative list.
+
+Move "Floppy" and "DVD/CD" description prefixes into drive description
+generation code to simplify boot menu generation.
+
+Rework QEMU's CMOS defined bootorder to work with priority scheme in
+new boot list.
+
+Have every CBFS entry create it's own BEV entry (instead of one entry
+for all CBFS payloads).  Move CBFS payload detection code into
+coreboot.c.
+
+Upstream commit: 72eee3e
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/ata.c        |   13 +-
+ src/block.c      |   20 +---
+ src/boot.c       |  419 +++++++++++++++++++++---------------------------------
+ src/boot.h       |   20 +--
+ src/coreboot.c   |   20 +++
+ src/floppy.c     |    5 +-
+ src/optionroms.c |    6 +-
+ src/usb-msc.c    |    6 +-
+ src/virtio-blk.c |    4 +-
+ 9 files changed, 211 insertions(+), 302 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/ata.c        |   13 +-
+ src/block.c      |   20 +---
+ src/boot.c       |  419 +++++++++++++++++++++---------------------------------
+ src/boot.h       |   20 +--
+ src/coreboot.c   |   20 +++
+ src/floppy.c     |    5 +-
+ src/optionroms.c |    6 +-
+ src/usb-msc.c    |    6 +-
+ src/virtio-blk.c |    4 +-
+ 9 files changed, 211 insertions(+), 302 deletions(-)
+
+diff --git a/src/ata.c b/src/ata.c
+index 440efc8..6a1b6e8 100644
+--- a/src/ata.c
++++ b/src/ata.c
+@@ -14,7 +14,7 @@
+ #include "pci.h" // foreachpci
+ #include "pci_ids.h" // PCI_CLASS_STORAGE_OTHER
+ #include "pci_regs.h" // PCI_INTERRUPT_LINE
+-#include "boot.h" // add_bcv_hd
++#include "boot.h" // boot_add_hd
+ #include "disk.h" // struct ata_s
+ #include "ata.h" // ATA_CB_STAT
+ #include "blockcmd.h" // CDB_CMD_READ_10
+@@ -771,17 +771,16 @@ init_drive_atapi(struct atadrive_s *dummy, u16 *buffer)
+     adrive_g->drive.sectors = (u64)-1;
+     u8 iscd = ((buffer[0] >> 8) & 0x1f) == 0x05;
+     char model[MAXMODEL+1];
+-    snprintf(adrive_g->drive.desc, MAXDESCSIZE, "ata%d-%d: %s ATAPI-%d %s"
++    snprintf(adrive_g->drive.desc, MAXDESCSIZE
++             , "DVD/CD [ata%d-%d: %s ATAPI-%d %s]"
+              , adrive_g->chan_gf->chanid, adrive_g->slave
+              , extract_model(model, buffer), extract_version(buffer)
+              , (iscd ? "DVD/CD" : "Device"));
+     dprintf(1, "%s\n", adrive_g->drive.desc);
+ 
+     // fill cdidmap
+-    if (iscd) {
+-        map_cd_drive(&adrive_g->drive);
+-        add_baid_cdrom(&adrive_g->drive);
+-    }
++    if (iscd)
++        boot_add_cd(&adrive_g->drive);
+ 
+     return adrive_g;
+ }
+@@ -830,7 +829,7 @@ init_drive_ata(struct atadrive_s *dummy, u16 *buffer)
+     setup_translation(&adrive_g->drive);
+ 
+     // Register with bcv system.
+-    add_bcv_internal(&adrive_g->drive);
++    boot_add_hd(&adrive_g->drive);
+ 
+     return adrive_g;
+ }
+diff --git a/src/block.c b/src/block.c
+index 6d620b7..4c37f65 100644
+--- a/src/block.c
++++ b/src/block.c
+@@ -225,26 +225,8 @@ add_ordered_drive(struct drive_s **idmap, u8 *count, struct drive_s *drive_g)
+         warn_noalloc();
+         return;
+     }
+-    struct drive_s **pos = &idmap[*count];
++    idmap[*count] = drive_g;
+     *count = *count + 1;
+-    if (CONFIG_THREADS) {
+-        // Add to idmap with assured drive order.
+-        struct drive_s **end = pos;
+-        for (;;) {
+-            struct drive_s **prev = pos - 1;
+-            if (prev < idmap)
+-                break;
+-            struct drive_s *prevdrive = *prev;
+-            if (prevdrive->type < drive_g->type
+-                || (prevdrive->type == drive_g->type
+-                    && prevdrive->cntl_id < drive_g->cntl_id))
+-                break;
+-            pos--;
+-        }
+-        if (pos != end)
+-            memmove(pos+1, pos, (void*)end-(void*)pos);
+-    }
+-    *pos = drive_g;
+ }
+ 
+ // Map a cd
+diff --git a/src/boot.c b/src/boot.c
+index 5137345..62d6487 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -16,6 +16,20 @@
+ 
+ struct ipl_s IPL;
+ 
++struct bootentry_s {
++    int type;
++    union {
++        u32 data;
++        struct segoff_s vector;
++        struct drive_s *drive;
++    };
++    int priority;
++    const char *description;
++    struct bootentry_s *next;
++};
++
++static struct bootentry_s *BootList;
++
+ 
+ /****************************************************************
+  * Boot setup
+@@ -56,51 +70,41 @@ loadBootOrder(void)
+     } while(f);
+ }
+ 
++#define DEFAULT_PRIO           9999
++
++static int DefaultFloppyPrio = 101;
++static int DefaultCDPrio     = 102;
++static int DefaultHDPrio     = 103;
++static int DefaultBEVPrio    = 104;
++
+ void
+ boot_setup(void)
+ {
+     if (! CONFIG_BOOT)
+         return;
+-    dprintf(3, "init boot device ordering\n");
+-
+-    memset(&IPL, 0, sizeof(IPL));
+-    struct ipl_entry_s *ie = &IPL.bev[0];
+-
+-    // Floppy drive
+-    ie->type = IPL_TYPE_FLOPPY;
+-    ie->description = "Floppy";
+-    ie++;
+-
+-    // First HDD
+-    ie->type = IPL_TYPE_HARDDISK;
+-    ie->description = "Hard Disk";
+-    ie++;
+-
+-    // CDROM
+-    if (CONFIG_CDROM_BOOT) {
+-        ie->type = IPL_TYPE_CDROM;
+-        ie->description = "DVD/CD";
+-        ie++;
+-    }
+-
+-    if (CONFIG_COREBOOT && CONFIG_COREBOOT_FLASH) {
+-        ie->type = IPL_TYPE_CBFS;
+-        ie->description = "CBFS";
+-        ie++;
+-    }
+ 
+-    IPL.bevcount = ie - IPL.bev;
+     SET_EBDA(boot_sequence, 0xffff);
+-    if (CONFIG_COREBOOT) {
+-        // XXX - hardcode defaults for coreboot.
+-        IPL.bootorder = 0x87654231;
+-        IPL.checkfloppysig = 1;
+-    } else {
++    IPL.checkfloppysig = 1;
++
++    if (!CONFIG_COREBOOT) {
+         // On emulators, get boot order from nvram.
+-        IPL.bootorder = (inb_cmos(CMOS_BIOS_BOOTFLAG2)
++        if (inb_cmos(CMOS_BIOS_BOOTFLAG1) & 1)
++            IPL.checkfloppysig = 0;
++        u32 bootorder = (inb_cmos(CMOS_BIOS_BOOTFLAG2)
+                          | ((inb_cmos(CMOS_BIOS_BOOTFLAG1) & 0xf0) << 4));
+-        if (!(inb_cmos(CMOS_BIOS_BOOTFLAG1) & 1))
+-            IPL.checkfloppysig = 1;
++        DefaultFloppyPrio = DefaultCDPrio = DefaultHDPrio
++            = DefaultBEVPrio = DEFAULT_PRIO;
++        int i;
++        for (i=101; i<104; i++) {
++            u32 val = bootorder & 0x0f;
++            bootorder >>= 4;
++            switch (val) {
++            case 1: DefaultFloppyPrio = i; break;
++            case 2: DefaultHDPrio = i;     break;
++            case 3: DefaultCDPrio = i;     break;
++            case 4: DefaultBEVPrio = i;    break;
++            }
++        }
+     }
+ 
+     loadBootOrder();
+@@ -111,169 +115,92 @@ boot_setup(void)
+  * IPL and BCV handlers
+  ****************************************************************/
+ 
+-// Add a BEV vector for a given pnp compatible option rom.
+-void
+-add_bev(u16 seg, u16 bev, u16 desc)
++static void
++bootentry_add(int type, int prio, u32 data, const char *desc)
+ {
+     if (! CONFIG_BOOT)
+         return;
+-    if (IPL.bevcount >= ARRAY_SIZE(IPL.bev))
++    struct bootentry_s *be = malloc_tmp(sizeof(*be));
++    if (!be) {
++        warn_noalloc();
+         return;
+-
+-    struct ipl_entry_s *ie = &IPL.bev[IPL.bevcount++];
+-    ie->type = IPL_TYPE_BEV;
+-    ie->vector = (seg << 16) | bev;
+-    const char *d = "Unknown";
+-    if (desc)
+-        d = MAKE_FLATPTR(seg, desc);
+-    ie->description = d;
++    }
++    be->type = type;
++    be->priority = prio;
++    be->data = data;
++    be->description = desc;
++
++    // Add entry in sorted order.
++    struct bootentry_s **pprev;
++    for (pprev = &BootList; *pprev; pprev = &(*pprev)->next) {
++        struct bootentry_s *pos = *pprev;
++        if (be->priority < pos->priority)
++            break;
++        if (be->priority > pos->priority)
++            continue;
++        if (be->type < pos->type)
++            break;
++        if (be->type > pos->type)
++            continue;
++        if (be->type <= IPL_TYPE_CDROM
++            && (be->drive->type < pos->drive->type
++                || (be->drive->type == pos->drive->type
++                    && be->drive->cntl_id < pos->drive->cntl_id)))
++            break;
++    }
++    be->next = *pprev;
++    *pprev = be;
+ }
+ 
+-// Add a IPL entry for BAID cdrom.
++// Add a BEV vector for a given pnp compatible option rom.
+ void
+-add_baid_cdrom(struct drive_s *drive_g)
++boot_add_bev(u16 seg, u16 bev, u16 desc)
+ {
+-    if (! CONFIG_CDROM_BOOT)
+-        return;
+-
+-    /* put first cdrom into ipl 3 for compatability with qemu */
+-    struct ipl_entry_s *ie = &IPL.bev[2];
+-    if (IPL.bevcount >= ARRAY_SIZE(IPL.bev) && ie->vector)
+-        return;
+-
+-    if (ie->vector)
+-        ie = &IPL.bev[IPL.bevcount++];
+-    ie->type = IPL_TYPE_CDROM;
+-    ie->vector = (u32)drive_g;
+-    ie->description = "DVD/CD";
++    bootentry_add(IPL_TYPE_BEV, DefaultBEVPrio, SEGOFF(seg, bev).segoff
++                  , desc ? MAKE_FLATPTR(seg, desc) : "Unknown");
++    DefaultBEVPrio = DEFAULT_PRIO;
+ }
+ 
+ // Add a bcv entry for an expansion card harddrive or legacy option rom
+ void
+-add_bcv(u16 seg, u16 ip, u16 desc)
++boot_add_bcv(u16 seg, u16 ip, u16 desc)
+ {
+-    if (! CONFIG_BOOT)
+-        return;
+-    if (IPL.bcvcount >= ARRAY_SIZE(IPL.bcv))
+-        return;
+-
+-    struct ipl_entry_s *ie = &IPL.bcv[IPL.bcvcount++];
+-    ie->type = BCV_TYPE_EXTERNAL;
+-    ie->vector = (seg << 16) | ip;
+-    const char *d = "Legacy option rom";
+-    if (desc)
+-        d = MAKE_FLATPTR(seg, desc);
+-    ie->description = d;
++    bootentry_add(IPL_TYPE_BCV, DEFAULT_PRIO, SEGOFF(seg, ip).segoff
++                  , desc ? MAKE_FLATPTR(seg, desc) : "Legacy option rom");
+ }
+ 
+-// Add a bcv entry for an internal harddrive
+ void
+-add_bcv_internal(struct drive_s *drive_g)
++boot_add_floppy(struct drive_s *drive_g)
+ {
+-    if (! CONFIG_BOOT)
+-        return;
+-    if (IPL.bcvcount >= ARRAY_SIZE(IPL.bcv))
+-        return;
+-
+-    struct ipl_entry_s *ie = &IPL.bcv[IPL.bcvcount++];
+-    if (CONFIG_THREADS) {
+-        // Add to bcv list with assured drive order.
+-        struct ipl_entry_s *end = ie;
+-        for (;;) {
+-            struct ipl_entry_s *prev = ie - 1;
+-            if (prev < IPL.bcv || prev->type != BCV_TYPE_INTERNAL)
+-                break;
+-            struct drive_s *prevdrive = (void*)prev->vector;
+-            if (prevdrive->type < drive_g->type
+-                || (prevdrive->type == drive_g->type
+-                    && prevdrive->cntl_id < drive_g->cntl_id))
+-                break;
+-            ie--;
+-        }
+-        if (ie != end)
+-            memmove(ie+1, ie, (void*)end-(void*)ie);
+-    }
+-    ie->type = BCV_TYPE_INTERNAL;
+-    ie->vector = (u32)drive_g;
+-    ie->description = "";
++    bootentry_add(IPL_TYPE_FLOPPY, DefaultFloppyPrio, (u32)drive_g
++                  , drive_g->desc);
+ }
+ 
+-
+-/****************************************************************
+- * Boot menu and BCV execution
+- ****************************************************************/
+-
+-// Show a generic menu item
+-static int
+-menu_show_default(struct ipl_entry_s *ie, int menupos)
++void
++boot_add_hd(struct drive_s *drive_g)
+ {
+-    char desc[33];
+-    printf("%d. %s\n", menupos
+-           , strtcpy(desc, ie->description, ARRAY_SIZE(desc)));
+-    return 1;
++    bootentry_add(IPL_TYPE_HARDDISK, DefaultHDPrio, (u32)drive_g
++                  , drive_g->desc);
+ }
+ 
+-// Show floppy menu item - but only if there exists a floppy drive.
+-static int
+-menu_show_floppy(struct ipl_entry_s *ie, int menupos)
++void
++boot_add_cd(struct drive_s *drive_g)
+ {
+-    int i;
+-    for (i = 0; i < Drives.floppycount; i++) {
+-        struct drive_s *drive_g = getDrive(EXTTYPE_FLOPPY, i);
+-        printf("%d. Floppy [%s]\n", menupos + i, drive_g->desc);
+-    }
+-    return Drives.floppycount;
++    bootentry_add(IPL_TYPE_CDROM, DefaultCDPrio, (u32)drive_g
++                  , drive_g->desc);
+ }
+ 
+-// Show menu items from BCV list.
+-static int
+-menu_show_harddisk(struct ipl_entry_s *ie, int menupos)
++// Add a CBFS payload entry
++void
++boot_add_cbfs(void *data, const char *desc)
+ {
+-    int i;
+-    for (i = 0; i < IPL.bcvcount; i++) {
+-        struct ipl_entry_s *ie = &IPL.bcv[i];
+-        struct drive_s *drive_g = (void*)ie->vector;
+-        switch (ie->type) {
+-        case BCV_TYPE_INTERNAL:
+-            printf("%d. %s\n", menupos + i, drive_g->desc);
+-            break;
+-        default:
+-            menu_show_default(ie, menupos+i);
+-            break;
+-        }
+-    }
+-    return IPL.bcvcount;
++    bootentry_add(IPL_TYPE_CBFS, DEFAULT_PRIO, (u32)data, desc);
+ }
+ 
+-// Show cdrom menu item - but only if there exists a cdrom drive.
+-static int
+-menu_show_cdrom(struct ipl_entry_s *ie, int menupos)
+-{
+-    struct drive_s *drive_g = (void*)ie->vector;
+-    if (!ie->vector)
+-        return 0;
+-    printf("%d. DVD/CD [%s]\n", menupos, drive_g->desc);
+-    return 1;
+-}
+ 
+-// Show coreboot-fs menu item.
+-static int
+-menu_show_cbfs(struct ipl_entry_s *ie, int menupos)
+-{
+-    int count = 0;
+-    struct cbfs_file *file = NULL;
+-    for (;;) {
+-        file = cbfs_findprefix("img/", file);
+-        if (!file)
+-            break;
+-        const char *filename = cbfs_filename(file);
+-        printf("%d. Payload [%s]\n", menupos + count, &filename[4]);
+-        count++;
+-        if (count > 8)
+-            break;
+-    }
+-    return count;
+-}
++/****************************************************************
++ * Boot menu and BCV execution
++ ****************************************************************/
+ 
+ // Show IPL option menu.
+ static void
+@@ -300,31 +227,15 @@ interactive_bootmenu(void)
+     printf("Select boot device:\n\n");
+     wait_threads();
+ 
+-    int subcount[ARRAY_SIZE(IPL.bev)];
+-    int menupos = 1;
+-    int i;
+-    for (i = 0; i < IPL.bevcount; i++) {
+-        struct ipl_entry_s *ie = &IPL.bev[i];
+-        int sc;
+-        switch (ie->type) {
+-        case IPL_TYPE_FLOPPY:
+-            sc = menu_show_floppy(ie, menupos);
+-            break;
+-        case IPL_TYPE_HARDDISK:
+-            sc = menu_show_harddisk(ie, menupos);
+-            break;
+-        case IPL_TYPE_CDROM:
+-            sc = menu_show_cdrom(ie, menupos);
+-            break;
+-        case IPL_TYPE_CBFS:
+-            sc = menu_show_cbfs(ie, menupos);
+-            break;
+-        default:
+-            sc = menu_show_default(ie, menupos);
+-            break;
+-        }
+-        subcount[i] = sc;
+-        menupos += sc;
++    // Show menu items
++    struct bootentry_s *pos = BootList;
++    int maxmenu = 0;
++    while (pos) {
++        char desc[60];
++        maxmenu++;
++        printf("%d. %s\n", maxmenu
++               , strtcpy(desc, pos->description, ARRAY_SIZE(desc)));
++        pos = pos->next;
+     }
+ 
+     for (;;) {
+@@ -332,37 +243,38 @@ interactive_bootmenu(void)
+         if (scan_code == 0x01)
+             // ESC
+             break;
+-        if (scan_code < 1 || scan_code > menupos)
++        if (scan_code < 1 || scan_code > maxmenu+1)
+             continue;
+         int choice = scan_code - 1;
+ 
+-        // Find out which IPL this was for.
+-        int bev = 0;
+-        while (choice > subcount[bev]) {
+-            choice -= subcount[bev];
+-            bev++;
+-        }
+-        IPL.bev[bev].subchoice = choice-1;
+-
+-        // Add user choice to the boot order.
+-        IPL.bootorder = (IPL.bootorder << 4) | (bev+1);
++        // Find entry and make top priority.
++        struct bootentry_s **pprev = &BootList;
++        while (--choice)
++            pprev = &(*pprev)->next;
++        pos = *pprev;
++        *pprev = pos->next;
++        pos->next = BootList;
++        BootList = pos;
++        pos->priority = 0;
+         break;
+     }
+     printf("\n");
+ }
+ 
+-// Run the specified bcv.
++static int HaveHDBoot, HaveFDBoot;
++
+ static void
+-run_bcv(struct ipl_entry_s *ie)
++add_bev(int type, u32 vector)
+ {
+-    switch (ie->type) {
+-    case BCV_TYPE_INTERNAL:
+-        map_hd_drive((void*)ie->vector);
+-        break;
+-    case BCV_TYPE_EXTERNAL:
+-        call_bcv(ie->vector >> 16, ie->vector & 0xffff);
+-        break;
+-    }
++    if (type == IPL_TYPE_HARDDISK && HaveHDBoot++)
++        return;
++    if (type == IPL_TYPE_FLOPPY && HaveFDBoot++)
++        return;
++    if (IPL.bevcount >= ARRAY_SIZE(IPL.bev))
++        return;
++    struct ipl_entry_s *bev = &IPL.bev[IPL.bevcount++];
++    bev->type = type;
++    bev->vector = vector;
+ }
+ 
+ // Prepare for boot - show menu and run bcvs.
+@@ -380,20 +292,35 @@ boot_prep(void)
+     interactive_bootmenu();
+     wait_threads();
+ 
+-    // Setup floppy boot order
+-    int override = IPL.bev[0].subchoice;
+-    struct drive_s *tmp = Drives.idmap[EXTTYPE_FLOPPY][0];
+-    Drives.idmap[EXTTYPE_FLOPPY][0] = Drives.idmap[EXTTYPE_FLOPPY][override];
+-    Drives.idmap[EXTTYPE_FLOPPY][override] = tmp;
++    // Map drives and populate BEV list
++    struct bootentry_s *pos = BootList;
++    while (pos) {
++        switch (pos->type) {
++        case IPL_TYPE_BCV:
++            call_bcv(pos->vector.seg, pos->vector.offset);
++            add_bev(IPL_TYPE_HARDDISK, 0);
++            break;
++        case IPL_TYPE_FLOPPY:
++            map_floppy_drive(pos->drive);
++            add_bev(IPL_TYPE_FLOPPY, 0);
++            break;
++        case IPL_TYPE_HARDDISK:
++            map_hd_drive(pos->drive);
++            add_bev(IPL_TYPE_HARDDISK, 0);
++            break;
++        case IPL_TYPE_CDROM:
++            map_cd_drive(pos->drive);
++            // NO BREAK
++        default:
++            add_bev(pos->type, pos->data);
++            break;
++        }
++        pos = pos->next;
++    }
+ 
+-    // Run BCVs
+-    override = IPL.bev[1].subchoice;
+-    if (override < IPL.bcvcount)
+-        run_bcv(&IPL.bcv[override]);
+-    int i;
+-    for (i=0; i<IPL.bcvcount; i++)
+-        if (i != override)
+-            run_bcv(&IPL.bcv[i]);
++    // If nothing added a floppy/hd boot - add it manually.
++    add_bev(IPL_TYPE_FLOPPY, 0);
++    add_bev(IPL_TYPE_HARDDISK, 0);
+ }
+ 
+ 
+@@ -462,6 +389,7 @@ boot_cdrom(struct ipl_entry_s *ie)
+ 
+     if (!ie->vector)
+         return;
++    printf("Booting from DVD/CD...\n");
+ 
+     struct drive_s *drive_g = (void*)ie->vector;
+     int status = cdrom_boot(drive_g);
+@@ -486,16 +414,8 @@ boot_cbfs(struct ipl_entry_s *ie)
+ {
+     if (!CONFIG_COREBOOT || !CONFIG_COREBOOT_FLASH)
+         return;
+-    int count = ie->subchoice;
+-    struct cbfs_file *file = NULL;
+-    for (;;) {
+-        file = cbfs_findprefix("img/", file);
+-        if (!file)
+-            return;
+-        if (count--)
+-            continue;
+-        cbfs_run_payload(file);
+-    }
++    printf("Booting from CBFS...\n");
++    cbfs_run_payload((void*)ie->vector);
+ }
+ 
+ static void
+@@ -504,32 +424,22 @@ do_boot(u16 seq_nr)
+     if (! CONFIG_BOOT)
+         panic("Boot support not compiled in.\n");
+ 
+-    u32 bootdev = IPL.bootorder;
+-    bootdev >>= 4 * seq_nr;
+-    bootdev &= 0xf;
+-
+-    /* Translate bootdev to an IPL table offset by subtracting 1 */
+-    bootdev -= 1;
+-
+-    if (bootdev >= IPL.bevcount) {
++    if (seq_nr >= IPL.bevcount) {
+         printf("No bootable device.\n");
+         // Loop with irqs enabled - this allows ctrl+alt+delete to work.
+         for (;;)
+             wait_irq();
+     }
+ 
+-    /* Do the loading, and set up vector as a far pointer to the boot
+-     * address, and bootdrv as the boot drive */
+-    struct ipl_entry_s *ie = &IPL.bev[bootdev];
+-    char desc[33];
+-    printf("Booting from %s...\n"
+-           , strtcpy(desc, ie->description, ARRAY_SIZE(desc)));
+-
++    // Boot the given BEV type.
++    struct ipl_entry_s *ie = &IPL.bev[seq_nr];
+     switch (ie->type) {
+     case IPL_TYPE_FLOPPY:
++        printf("Booting from Floppy...\n");
+         boot_disk(0x00, IPL.checkfloppysig);
+         break;
+     case IPL_TYPE_HARDDISK:
++        printf("Booting from Hard Disk...\n");
+         boot_disk(0x80, 1);
+         break;
+     case IPL_TYPE_CDROM:
+@@ -539,6 +449,7 @@ do_boot(u16 seq_nr)
+         boot_cbfs(ie);
+         break;
+     case IPL_TYPE_BEV:
++        printf("Booting from ROM...\n");
+         call_boot_entry(ie->vector >> 16, ie->vector & 0xffff, 0);
+         break;
+     }
+diff --git a/src/boot.h b/src/boot.h
+index 778aebd..f1a428e 100644
+--- a/src/boot.h
++++ b/src/boot.h
+@@ -9,16 +9,12 @@
+ 
+ struct ipl_entry_s {
+     u16 type;
+-    u16 subchoice;
+     u32 vector;
+-    const char *description;
+ };
+ 
+ struct ipl_s {
+     struct ipl_entry_s bev[8];
+-    struct ipl_entry_s bcv[8];
+-    int bevcount, bcvcount;
+-    u32 bootorder;
++    int bevcount;
+     int checkfloppysig;
+     char **fw_bootorder;
+     int fw_bootorder_count;
+@@ -29,9 +25,7 @@ struct ipl_s {
+ #define IPL_TYPE_CDROM       0x03
+ #define IPL_TYPE_CBFS        0x20
+ #define IPL_TYPE_BEV         0x80
+-
+-#define BCV_TYPE_EXTERNAL    0x80
+-#define BCV_TYPE_INTERNAL    0x02
++#define IPL_TYPE_BCV         0x81
+ 
+ 
+ /****************************************************************
+@@ -41,11 +35,13 @@ struct ipl_s {
+ // boot.c
+ extern struct ipl_s IPL;
+ void boot_setup(void);
+-void add_bev(u16 seg, u16 bev, u16 desc);
+-void add_bcv(u16 seg, u16 ip, u16 desc);
++void boot_add_bev(u16 seg, u16 bev, u16 desc);
++void boot_add_bcv(u16 seg, u16 ip, u16 desc);
+ struct drive_s;
+-void add_bcv_internal(struct drive_s *drive_g);
+-void add_baid_cdrom(struct drive_s *drive_g);
++void boot_add_floppy(struct drive_s *drive_g);
++void boot_add_hd(struct drive_s *drive_g);
++void boot_add_cd(struct drive_s *drive_g);
++void boot_add_cbfs(void *data, const char *desc);
+ 
+ void boot_prep(void);
+ 
+diff --git a/src/coreboot.c b/src/coreboot.c
+index db0063b..57b6203 100644
+--- a/src/coreboot.c
++++ b/src/coreboot.c
+@@ -12,6 +12,7 @@
+ #include "biosvar.h" // GET_EBDA
+ #include "lzmadecode.h" // LzmaDecode
+ #include "smbios.h" // smbios_init
++#include "boot.h" // boot_add_cbfs
+ 
+ 
+ /****************************************************************
+@@ -599,9 +600,28 @@ cbfs_run_payload(struct cbfs_file *file)
+     }
+ }
+ 
++// Register payloads in "img/" directory with boot system.
++static void
++register_cbfs_payload(void)
++{
++    struct cbfs_file *file = NULL;
++    for (;;) {
++        file = cbfs_findprefix("img/", file);
++        if (!file)
++            break;
++        const char *filename = cbfs_filename(file);
++        char *desc = malloc_tmp(MAXDESCSIZE);
++        if (!desc)
++            break;
++        snprintf(desc, MAXDESCSIZE, "Payload [%s]", &filename[4]);
++        boot_add_cbfs(file, desc);
++    }
++}
++
+ void
+ coreboot_setup(void)
+ {
+     coreboot_fill_map();
+     cbfs_setup();
++    register_cbfs_payload();
+ }
+diff --git a/src/floppy.c b/src/floppy.c
+index 6491b96..8986e39 100644
+--- a/src/floppy.c
++++ b/src/floppy.c
+@@ -13,6 +13,7 @@
+ #include "cmos.h" // inb_cmos
+ #include "pic.h" // eoi_pic1
+ #include "bregs.h" // struct bregs
++#include "boot.h" // boot_add_floppy
+ 
+ #define FLOPPY_SIZE_CODE 0x02 // 512 byte sectors
+ #define FLOPPY_DATALEN 0xff   // Not used - because size code is 0x02
+@@ -111,12 +112,12 @@ addFloppy(int floppyid, int ftype, int driver)
+     drive_g->floppy_type = ftype;
+     drive_g->sectors = (u64)-1;
+     drive_g->desc = desc;
+-    snprintf(desc, MAXDESCSIZE, "drive %c", 'A' + floppyid);
++    snprintf(desc, MAXDESCSIZE, "Floppy [drive %c]", 'A' + floppyid);
+ 
+     memcpy(&drive_g->lchs, &FloppyInfo[ftype].chs
+            , sizeof(FloppyInfo[ftype].chs));
+ 
+-    map_floppy_drive(drive_g);
++    boot_add_floppy(drive_g);
+     return drive_g;
+ }
+ 
+diff --git a/src/optionroms.c b/src/optionroms.c
+index a63c19e..48e573a 100644
+--- a/src/optionroms.c
++++ b/src/optionroms.c
+@@ -411,17 +411,17 @@ optionrom_setup(void)
+         struct pnp_data *pnp = get_pnp_rom(rom);
+         if (! pnp) {
+             // Legacy rom.
+-            add_bcv(FLATPTR_TO_SEG(rom), OPTION_ROM_INITVECTOR, 0);
++            boot_add_bcv(FLATPTR_TO_SEG(rom), OPTION_ROM_INITVECTOR, 0);
+             continue;
+         }
+         // PnP rom.
+         if (pnp->bev)
+             // Can boot system - add to IPL list.
+-            add_bev(FLATPTR_TO_SEG(rom), pnp->bev, pnp->productname);
++            boot_add_bev(FLATPTR_TO_SEG(rom), pnp->bev, pnp->productname);
+         else
+             // Check for BCV (there may be multiple).
+             while (pnp && pnp->bcv) {
+-                add_bcv(FLATPTR_TO_SEG(rom), pnp->bcv, pnp->productname);
++                boot_add_bcv(FLATPTR_TO_SEG(rom), pnp->bcv, pnp->productname);
+                 pnp = get_pnp_next(rom, pnp);
+             }
+     }
+diff --git a/src/usb-msc.c b/src/usb-msc.c
+index 9b146cf..508d03c 100644
+--- a/src/usb-msc.c
++++ b/src/usb-msc.c
+@@ -11,7 +11,7 @@
+ #include "biosvar.h" // GET_GLOBAL
+ #include "blockcmd.h" // cdb_read
+ #include "disk.h" // DTYPE_USB
+-#include "boot.h" // add_bcv_internal
++#include "boot.h" // boot_add_hd
+ 
+ struct usbdrive_s {
+     struct drive_s drive;
+@@ -140,7 +140,7 @@ setup_drive_cdrom(struct disk_op_s *op)
+ {
+     op->drive_g->blksize = CDROM_SECTOR_SIZE;
+     op->drive_g->sectors = (u64)-1;
+-    map_cd_drive(op->drive_g);
++    boot_add_cd(op->drive_g);
+     return 0;
+ }
+ 
+@@ -168,7 +168,7 @@ setup_drive_hd(struct disk_op_s *op)
+     setup_translation(op->drive_g);
+ 
+     // Register with bcv system.
+-    add_bcv_internal(op->drive_g);
++    boot_add_hd(op->drive_g);
+ 
+     return 0;
+ }
+diff --git a/src/virtio-blk.c b/src/virtio-blk.c
+index 9c9ed83..def8313 100644
+--- a/src/virtio-blk.c
++++ b/src/virtio-blk.c
+@@ -13,7 +13,7 @@
+ #include "biosvar.h" // GET_GLOBAL
+ #include "pci_ids.h" // PCI_DEVICE_ID_VIRTIO_BLK
+ #include "pci_regs.h" // PCI_VENDOR_ID
+-#include "boot.h" // add_bcv_internal
++#include "boot.h" // boot_add_hd
+ #include "virtio-pci.h"
+ #include "virtio-ring.h"
+ #include "virtio-blk.h"
+@@ -156,7 +156,7 @@ init_virtio_blk(u16 bdf)
+     vdrive_g->drive.desc = desc;
+ 
+     setup_translation(&vdrive_g->drive);
+-    add_bcv_internal(&vdrive_g->drive);
++    boot_add_hd(&vdrive_g->drive);
+ 
+     vp_set_status(ioaddr, VIRTIO_CONFIG_S_ACKNOWLEDGE |
+                   VIRTIO_CONFIG_S_DRIVER | VIRTIO_CONFIG_S_DRIVER_OK);
+-- 
+1.7.4.rc1.16.gd2f15e
+

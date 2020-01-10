@@ -1,0 +1,48 @@
+From f0652357f622b4b4cbffb0914e95066cc1588710 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:54 -0200
+Subject: [PATCH 16/29] Don't access drive_g->desc from boot_cdrom().
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-16-git-send-email-gleb@redhat.com>
+Patchwork-id: 16172
+O-Subject: [PATCH SEABIOS RHEL6.1 15/25] Don't access drive_g->desc from
+	boot_cdrom().
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+The drive description is allocated with malloc_tmp() and is thus only
+available during the POST phase - boot_cdrom() is called during the
+boot phase.
+
+Upstream commit: ecbcf77
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/boot.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index a93bb5f..8e33d53 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -431,7 +431,7 @@ boot_cdrom(struct ipl_entry_s *ie)
+     struct drive_s *drive_g = (void*)ie->vector;
+     int status = cdrom_boot(drive_g);
+     if (status) {
+-        printf("Boot failed: Could not read from CDROM %s (code %04x)\n", drive_g->desc, status);
++        printf("Boot failed: Could not read from CDROM (code %04x)\n", status);
+         return;
+     }
+ 
+-- 
+1.7.4.rc1.16.gd2f15e
+

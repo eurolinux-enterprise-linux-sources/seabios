@@ -1,0 +1,133 @@
+From 2569b714903c96581af857109315115575eb151b Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:47 -0200
+Subject: [PATCH 09/29] Track the source of each optionrom deployed.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-9-git-send-email-gleb@redhat.com>
+Patchwork-id: 16175
+O-Subject: [PATCH SEABIOS RHEL6.1 08/25] Track the source of each optionrom
+	deployed.
+Bugzilla: 643688
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+It's useful to track where each optionrom in the system originated
+from when initializing bev/bcvs.  So, keep a map of the rom address to
+its source.
+
+Upstream commit: bca3a87
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/optionroms.c |   34 ++++++++++++++++++++++++----------
+ 1 files changed, 24 insertions(+), 10 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/optionroms.c |   34 ++++++++++++++++++++++++----------
+ 1 files changed, 24 insertions(+), 10 deletions(-)
+
+diff --git a/src/optionroms.c b/src/optionroms.c
+index cde5b4d..a63c19e 100644
+--- a/src/optionroms.c
++++ b/src/optionroms.c
+@@ -210,6 +210,15 @@ init_optionrom(struct rom_header *rom, u16 bdf, int isvga)
+     return 0;
+ }
+ 
++#define RS_PCIROM (1LL<<33)
++
++static void
++setRomSource(u64 *sources, struct rom_header *rom, u64 source)
++{
++    if (sources)
++        sources[((u32)rom - BUILD_ROM_START) / OPTION_ROM_ALIGN] = source;
++}
++
+ 
+ /****************************************************************
+  * Roms in CBFS
+@@ -239,16 +248,19 @@ lookup_hardcode(u32 vendev)
+ 
+ // Run all roms in a given CBFS directory.
+ static void
+-run_file_roms(const char *prefix, int isvga)
++run_file_roms(const char *prefix, int isvga, u64 *sources)
+ {
+     u32 file = 0;
+     for (;;) {
+         file = romfile_findprefix(prefix, file);
+         if (!file)
+             break;
+-        int ret = romfile_copy(file, (void*)RomEnd, max_rom() - RomEnd);
+-        if (ret > 0)
+-            init_optionrom((void*)RomEnd, 0, isvga);
++        struct rom_header *rom = (void*)RomEnd;
++        int ret = romfile_copy(file, rom, max_rom() - RomEnd);
++        if (ret > 0) {
++            setRomSource(sources, rom, file);
++            init_optionrom(rom, 0, isvga);
++        }
+     }
+ }
+ 
+@@ -329,7 +341,7 @@ fail:
+ 
+ // Attempt to map and initialize the option rom on a given PCI device.
+ static int
+-init_pcirom(u16 bdf, int isvga)
++init_pcirom(u16 bdf, int isvga, u64 *sources)
+ {
+     u32 vendev = pci_config_readl(bdf, PCI_VENDOR_ID);
+     dprintf(4, "Attempting to init PCI bdf %02x:%02x.%x (vd %04x:%04x)\n"
+@@ -341,6 +353,7 @@ init_pcirom(u16 bdf, int isvga)
+     if (! rom)
+         // No ROM present.
+         return -1;
++    setRomSource(sources, rom, RS_PCIROM | bdf);
+     return init_optionrom(rom, bdf, isvga);
+ }
+ 
+@@ -356,7 +369,8 @@ optionrom_setup(void)
+         return;
+ 
+     dprintf(1, "Scan for option roms\n");
+-
++    u64 sources[(BUILD_BIOS_ADDR - BUILD_ROM_START) / OPTION_ROM_ALIGN];
++    memset(sources, 0, sizeof(sources));
+     u32 post_vga = RomEnd;
+ 
+     if (CONFIG_OPTIONROMS_DEPLOYED) {
+@@ -377,11 +391,11 @@ optionrom_setup(void)
+             if (v == 0x0000 || v == 0xffff || v == PCI_CLASS_DISPLAY_VGA
+                 || (CONFIG_ATA && v == PCI_CLASS_STORAGE_IDE))
+                 continue;
+-            init_pcirom(bdf, 0);
++            init_pcirom(bdf, 0, sources);
+         }
+ 
+         // Find and deploy CBFS roms not associated with a device.
+-        run_file_roms("genroms/", 0);
++        run_file_roms("genroms/", 0, sources);
+     }
+ 
+     // All option roms found and deployed - now build BEV/BCV vectors.
+@@ -437,10 +451,10 @@ vga_setup(void)
+         // Find and deploy PCI VGA rom.
+         int bdf = VGAbdf = pci_find_vga();
+         if (bdf >= 0)
+-            init_pcirom(bdf, 1);
++            init_pcirom(bdf, 1, NULL);
+ 
+         // Find and deploy CBFS vga-style roms not associated with a device.
+-        run_file_roms("vgaroms/", 1);
++        run_file_roms("vgaroms/", 1, NULL);
+     }
+ 
+     if (RomEnd == BUILD_ROM_START) {
+-- 
+1.7.4.rc1.16.gd2f15e
+

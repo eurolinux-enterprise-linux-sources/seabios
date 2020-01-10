@@ -1,0 +1,64 @@
+From 76157026476100c44cb2943bf3fc27980f68f667 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:42 -0200
+Subject: [PATCH 04/29] Add strchr() function.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-4-git-send-email-gleb@redhat.com>
+Patchwork-id: 16170
+O-Subject: [PATCH SEABIOS RHEL6.1 03/25] Add strchr() function.
+Bugzilla: 643688
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Upstream commit: 2e109a6
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/util.c |    9 +++++++++
+ src/util.h |    1 +
+ 2 files changed, 10 insertions(+), 0 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/util.c |    9 +++++++++
+ src/util.h |    1 +
+ 2 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/src/util.c b/src/util.c
+index 8e02d1e..8ca12f6 100644
+--- a/src/util.c
++++ b/src/util.c
+@@ -253,6 +253,15 @@ strtcpy(char *dest, const char *src, size_t len)
+     return dest;
+ }
+ 
++// locate first occurance of character c in the string s
++char *
++strchr(const char *s, int c)
++{
++    for (; *s; s++)
++        if (*s == c)
++            return (char*)s;
++    return NULL;
++}
+ 
+ /****************************************************************
+  * Keyboard calls
+diff --git a/src/util.h b/src/util.h
+index 3d68d45..6db527c 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -208,6 +208,7 @@ void *memcpy(void *d1, const void *s1, size_t len);
+ void iomemcpy(void *d, const void *s, u32 len);
+ void *memmove(void *d, const void *s, size_t len);
+ char *strtcpy(char *dest, const char *src, size_t len);
++char *strchr(const char *s, int c);
+ int get_keystroke(int msec);
+ 
+ // stacks.c
+-- 
+1.7.4.rc1.16.gd2f15e
+

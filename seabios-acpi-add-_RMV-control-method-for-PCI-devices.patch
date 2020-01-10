@@ -1,0 +1,114 @@
+From cebd951ab3f38eb3ad054d1f18be6c6b56ea4063 Mon Sep 17 00:00:00 2001
+From: Marcelo Tosatti <mtosatti@redhat.com>
+Date: Wed, 19 Jan 2011 15:13:20 -0200
+Subject: [PATCH 29/29] seabios: acpi: add _RMV control method for PCI devices
+
+RH-Author: Marcelo Tosatti <mtosatti@redhat.com>
+Message-id: <20110119151320.GA7527@amt.cnet>
+Patchwork-id: 16605
+O-Subject: [PATCH RHEL6.1 seabios] seabios: acpi: add _RMV control method for
+	PCI devices
+Bugzilla: 671544
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Gleb Natapov <gleb@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+Use _RMV method to indicate whether device can be removed.
+
+Data is retrieved from QEMU via I/O port 0xae0c.
+
+Signed-off-by: Marcelo Tosatti <mtosatti@redhat.com>
+Acked-by: Gleb Natapov <gleb@redhat.com>
+(upstream backport of commit 3c241edf3d7ef29c21e63ab74cfc7cb6f4a92ab3)
+BZ: 498774
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/acpi-dsdt.dsl |   52 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 files changed, 52 insertions(+), 0 deletions(-)
+
+diff --git a/src/acpi-dsdt.dsl b/src/acpi-dsdt.dsl
+index 6de2d75..b54c558 100644
+--- a/src/acpi-dsdt.dsl
++++ b/src/acpi-dsdt.dsl
+@@ -108,6 +108,12 @@ DefinitionBlock (
+                 B0EJ, 32,
+             }
+ 
++            OperationRegion(RMVC, SystemIO, 0xae0c, 0x04)
++            Field(RMVC, DWordAcc, NoLock, WriteAsZeros)
++            {
++                PCRM, 32,
++            }
++
+ #define hotplug_slot(name, nr) \
+             Device (S##name) {                    \
+                Name (_ADR, nr##0000)              \
+@@ -239,11 +245,14 @@ DefinitionBlock (
+                                  Return (0x00)
+                          }
+                  }
++                 Method(_RMV) { Return (0x00) }
+         }
+ 
+ 	/* PIIX3 ISA bridge */
+         Device (ISA) {
+             Name (_ADR, 0x00010000)
++            Method(_RMV) { Return (0x00) }
++
+ 
+             /* PIIX PCI to ISA irq remapping */
+             OperationRegion (P40C, PCI_Config, 0x60, 0x04)
+@@ -436,6 +445,49 @@ DefinitionBlock (
+ 		DRSJ, 32
+ 	    }
+ 	}
++
++#define gen_pci_device(name, nr)                                \
++        Device(SL##name) {                                      \
++            Name (_ADR, nr##0000)                               \
++            Method (_RMV) {                                     \
++                If (And(\_SB.PCI0.PCRM, ShiftLeft(1, nr))) {    \
++                    Return (0x1)                                \
++                }                                               \
++                Return (0x0)                                    \
++            }                                                   \
++            Name (_SUN, name)                                   \
++        }
++
++        /* VGA (slot 1) and ISA bus (slot 2) defined above */
++	gen_pci_device(3, 0x0003)
++	gen_pci_device(4, 0x0004)
++	gen_pci_device(5, 0x0005)
++	gen_pci_device(6, 0x0006)
++	gen_pci_device(7, 0x0007)
++	gen_pci_device(8, 0x0008)
++	gen_pci_device(9, 0x0009)
++	gen_pci_device(10, 0x000a)
++	gen_pci_device(11, 0x000b)
++	gen_pci_device(12, 0x000c)
++	gen_pci_device(13, 0x000d)
++	gen_pci_device(14, 0x000e)
++	gen_pci_device(15, 0x000f)
++	gen_pci_device(16, 0x0010)
++	gen_pci_device(17, 0x0011)
++	gen_pci_device(18, 0x0012)
++	gen_pci_device(19, 0x0013)
++	gen_pci_device(20, 0x0014)
++	gen_pci_device(21, 0x0015)
++	gen_pci_device(22, 0x0016)
++	gen_pci_device(23, 0x0017)
++	gen_pci_device(24, 0x0018)
++	gen_pci_device(25, 0x0019)
++	gen_pci_device(26, 0x001a)
++	gen_pci_device(27, 0x001b)
++	gen_pci_device(28, 0x001c)
++	gen_pci_device(29, 0x001d)
++	gen_pci_device(30, 0x001e)
++	gen_pci_device(31, 0x001f)
+     }
+ 
+     /* PCI IRQs */
+-- 
+1.7.4.rc1.16.gd2f15e
+

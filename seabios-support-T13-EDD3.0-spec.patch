@@ -1,0 +1,176 @@
+From 91af797717e81b671eccf7cfd39e7991c0ed907f Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Sun, 30 Jan 2011 11:25:32 -0200
+Subject: [PATCH 1/2] support T13 EDD3.0 spec
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <20110130112532.GD5700@redhat.com>
+Patchwork-id: 17274
+O-Subject: [PATCH SEABIOS RHEL6.1] support T13 EDD3.0 spec
+Bugzilla: 673751
+RH-Acked-by: Marcelo Tosatti <mtosatti@redhat.com>
+RH-Acked-by: Juan Quintela <quintela@redhat.com>
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+
+Some guests (such as Linux) expect BIOS to behave according to T13
+EDD3.0 spec. T13 spec is much better then Phoenix since it provides
+more information about interface and device paths. This patch adds
+support for the spec. If guest provides buffer with enough space for
+T13 EDD info return EDD according to T13 spec otherwise use Phoenix
+one.
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+(cherry picked from commit f5154e2395db92bcaa9c86d483bd68d8fb2fbab2)
+BZ: 673751
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+--
+			Gleb.
+
+Signed-off-by: Eduardo Habkost <ehabkost@raisama.net>
+---
+ src/disk.c |   42 +++++++++++++++++++++++++++---------------
+ src/disk.h |   15 ++++++++++++---
+ 2 files changed, 39 insertions(+), 18 deletions(-)
+
+diff --git a/src/disk.c b/src/disk.c
+index f7bfe9c..8f7c61f 100644
+--- a/src/disk.c
++++ b/src/disk.c
+@@ -503,6 +503,7 @@ static void
+ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+ {
+     u16 size = GET_INT13DPT(regs, size);
++    u16 t13 = size == 74;
+ 
+     // Buffer is too small
+     if (size < 26) {
+@@ -553,8 +554,9 @@ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+     // EDD 2.x
+ 
+     int bdf;
+-    u16 iobase1;
+-    u64 device_path;
++    u16 iobase1 = 0;
++    u64 device_path = 0;
++    u8 channel = 0;
+     SET_INT13DPT(regs, size, 30);
+     if (type == DTYPE_ATA || type == DTYPE_ATAPI) {
+         u16 ebda_seg = get_ebda_seg();
+@@ -573,6 +575,7 @@ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+         iobase1 = GET_GLOBALFLAT(chan_gf->iobase1);
+         bdf = GET_GLOBALFLAT(chan_gf->pci_bdf);
+         device_path = slave;
++        channel = GET_GLOBALFLAT(chan_gf->chanid);
+ 
+         u16 options = 0;
+         if (type == DTYPE_ATA) {
+@@ -613,8 +616,6 @@ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+         SET_INT13DPT(regs, dpte_segment, 0);
+         SET_INT13DPT(regs, dpte_offset, 0);
+         bdf = GET_GLOBAL(drive_g->cntl_id);
+-        device_path = 0;
+-        iobase1 = 0;
+     }
+ 
+     if (size < 66) {
+@@ -624,7 +625,7 @@ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+ 
+     // EDD 3.x
+     SET_INT13DPT(regs, key, 0xbedd);
+-    SET_INT13DPT(regs, dpi_length, 36);
++    SET_INT13DPT(regs, dpi_length, t13 ? 44 : 36);
+     SET_INT13DPT(regs, reserved1, 0);
+     SET_INT13DPT(regs, reserved2, 0);
+ 
+@@ -632,17 +633,20 @@ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+         SET_INT13DPT(regs, host_bus[0], 'P');
+         SET_INT13DPT(regs, host_bus[1], 'C');
+         SET_INT13DPT(regs, host_bus[2], 'I');
+-        SET_INT13DPT(regs, host_bus[3], 0);
++        SET_INT13DPT(regs, host_bus[3], ' ');
+ 
+         u32 path = (pci_bdf_to_bus(bdf) | (pci_bdf_to_dev(bdf) << 8)
+                     | (pci_bdf_to_fn(bdf) << 16));
++        if (t13)
++            path |= channel << 24;
++
+         SET_INT13DPT(regs, iface_path, path);
+     } else {
+         // ISA
+         SET_INT13DPT(regs, host_bus[0], 'I');
+         SET_INT13DPT(regs, host_bus[1], 'S');
+         SET_INT13DPT(regs, host_bus[2], 'A');
+-        SET_INT13DPT(regs, host_bus[3], 0);
++        SET_INT13DPT(regs, host_bus[3], ' ');
+ 
+         SET_INT13DPT(regs, iface_path, iobase1);
+     }
+@@ -651,22 +655,30 @@ disk_1348(struct bregs *regs, struct drive_s *drive_g)
+         SET_INT13DPT(regs, iface_type[0], 'A');
+         SET_INT13DPT(regs, iface_type[1], 'T');
+         SET_INT13DPT(regs, iface_type[2], 'A');
+-        SET_INT13DPT(regs, iface_type[3], 0);
++        SET_INT13DPT(regs, iface_type[3], ' ');
+     } else {
+         SET_INT13DPT(regs, iface_type[0], 'S');
+         SET_INT13DPT(regs, iface_type[1], 'C');
+         SET_INT13DPT(regs, iface_type[2], 'S');
+         SET_INT13DPT(regs, iface_type[3], 'I');
+     }
+-    SET_INT13DPT(regs, iface_type[4], 0);
+-    SET_INT13DPT(regs, iface_type[5], 0);
+-    SET_INT13DPT(regs, iface_type[6], 0);
+-    SET_INT13DPT(regs, iface_type[7], 0);
++    SET_INT13DPT(regs, iface_type[4], ' ');
++    SET_INT13DPT(regs, iface_type[5], ' ');
++    SET_INT13DPT(regs, iface_type[6], ' ');
++    SET_INT13DPT(regs, iface_type[7], ' ');
++
++    if (t13) {
++        SET_INT13DPT(regs, t13.device_path[0], device_path);
++        SET_INT13DPT(regs, t13.device_path[1], 0);
+ 
+-    SET_INT13DPT(regs, device_path, device_path);
++        SET_INT13DPT(regs, t13.checksum
++                     , -checksum_far(regs->ds, (void*)(regs->si+30), 43));
++    } else {
++        SET_INT13DPT(regs, phoenix.device_path, device_path);
+ 
+-    SET_INT13DPT(regs, checksum
+-                 , -checksum_far(regs->ds, (void*)(regs->si+30), 35));
++        SET_INT13DPT(regs, phoenix.checksum
++                     , -checksum_far(regs->ds, (void*)(regs->si+30), 35));
++    }
+ 
+     disk_ret(regs, DISK_RET_SUCCESS);
+ }
+diff --git a/src/disk.h b/src/disk.h
+index 508536f..94dec44 100644
+--- a/src/disk.h
++++ b/src/disk.h
+@@ -63,9 +63,18 @@ struct int13dpt_s {
+     u8  host_bus[4];
+     u8  iface_type[8];
+     u64 iface_path;
+-    u64 device_path;
+-    u8  reserved3;
+-    u8  checksum;
++    union {
++        struct {
++            u64 device_path;
++            u8  reserved3;
++            u8  checksum;
++        } phoenix;
++        struct {
++            u64 device_path[2];
++            u8  reserved3;
++            u8  checksum;
++        } t13;
++    };
+ } PACKED;
+ 
+ #define GET_INT13DPT(regs,var)                                          \
+-- 
+1.7.3.2
+

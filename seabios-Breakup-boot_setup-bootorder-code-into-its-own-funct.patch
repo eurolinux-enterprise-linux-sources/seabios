@@ -1,0 +1,124 @@
+From c5aea7774d880e6d9931622b78ec37a2db0b1bd9 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:19:45 -0200
+Subject: [PATCH 07/29] Breakup boot_setup() bootorder code into its own function.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-7-git-send-email-gleb@redhat.com>
+Patchwork-id: 16174
+O-Subject: [PATCH SEABIOS RHEL6.1 06/25] Breakup boot_setup() bootorder code
+	into its own function.
+Bugzilla: 643688
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Upstream commit: d1a1746
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/boot.c |   71 ++++++++++++++++++++++++++++++++++-------------------------
+ 1 files changed, 41 insertions(+), 30 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/boot.c |   71 ++++++++++++++++++++++++++++++++++-------------------------
+ 1 files changed, 41 insertions(+), 30 deletions(-)
+
+diff --git a/src/boot.c b/src/boot.c
+index 4fb73ac..5137345 100644
+--- a/src/boot.c
++++ b/src/boot.c
+@@ -18,9 +18,44 @@ struct ipl_s IPL;
+ 
+ 
+ /****************************************************************
+- * IPL and BCV handlers
++ * Boot setup
+  ****************************************************************/
+ 
++static void
++loadBootOrder(void)
++{
++    char *f = romfile_loadfile("bootorder", NULL);
++    if (!f)
++        return;
++
++    int i;
++    IPL.fw_bootorder_count = 1;
++    while (f[i]) {
++        if (f[i] == '\n')
++            IPL.fw_bootorder_count++;
++        i++;
++    }
++    IPL.fw_bootorder = malloc_tmphigh(IPL.fw_bootorder_count*sizeof(char*));
++    if (!IPL.fw_bootorder) {
++        warn_noalloc();
++        free(f);
++        return;
++    }
++
++    dprintf(3, "boot order:\n");
++    i = 0;
++    do {
++        IPL.fw_bootorder[i] = f;
++        f = strchr(f, '\n');
++        if (f) {
++            *f = '\0';
++            f++;
++            dprintf(3, "%d: %s\n", i, IPL.fw_bootorder[i]);
++            i++;
++        }
++    } while(f);
++}
++
+ void
+ boot_setup(void)
+ {
+@@ -68,37 +103,13 @@ boot_setup(void)
+             IPL.checkfloppysig = 1;
+     }
+ 
+-    char *f = romfile_loadfile("bootorder", NULL);
+-    if (!f)
+-        return;
++    loadBootOrder();
++}
+ 
+-    int i;
+-    IPL.fw_bootorder_count = 1;
+-    while(f[i]) {
+-        if (f[i] == '\n')
+-            IPL.fw_bootorder_count++;
+-        i++;
+-    }
+-    IPL.fw_bootorder = malloc_tmphigh(IPL.fw_bootorder_count*sizeof(char*));
+-    if (!IPL.fw_bootorder) {
+-        warn_noalloc();
+-        free(f);
+-        return;
+-    }
+ 
+-    dprintf(3, "boot order:\n");
+-    i = 0;
+-    do {
+-        IPL.fw_bootorder[i] = f;
+-        f = strchr(f, '\n');
+-        if (f) {
+-            *f = '\0';
+-            f++;
+-            dprintf(3, "%d: %s\n", i, IPL.fw_bootorder[i]);
+-            i++;
+-        }
+-    } while(f);
+-}
++/****************************************************************
++ * IPL and BCV handlers
++ ****************************************************************/
+ 
+ // Add a BEV vector for a given pnp compatible option rom.
+ void
+-- 
+1.7.4.rc1.16.gd2f15e
+

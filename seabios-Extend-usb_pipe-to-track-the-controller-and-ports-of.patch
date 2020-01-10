@@ -1,0 +1,120 @@
+From 22762e304cfa8bae01058ee0e047811ec18dd3c2 Mon Sep 17 00:00:00 2001
+From: Gleb Natapov <gleb@redhat.com>
+Date: Wed, 12 Jan 2011 12:20:03 -0200
+Subject: [PATCH 25/29] Extend 'usb_pipe' to track the controller and ports of each device.
+
+RH-Author: Gleb Natapov <gleb@redhat.com>
+Message-id: <1294834804-16829-25-git-send-email-gleb@redhat.com>
+Patchwork-id: 16187
+O-Subject: [PATCH SEABIOS RHEL6.1 24/25] Extend 'usb_pipe' to track the
+	controller and ports of each device.
+Bugzilla: 643688
+RH-Acked-by: Jes Sorensen <Jes.Sorensen@redhat.com>
+RH-Acked-by: Eduardo Habkost <ehabkost@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Track the path of ports and controller of each usb device.  This is
+useful for reporting the exact device path.
+
+Upstream commit: a5f2b91
+
+Signed-off-by: Gleb Natapov <gleb@redhat.com>
+---
+ src/usb-ehci.c |    1 +
+ src/usb-ohci.c |    1 +
+ src/usb-uhci.c |    1 +
+ src/usb.c      |    4 ++++
+ src/usb.h      |    2 ++
+ 5 files changed, 9 insertions(+), 0 deletions(-)
+
+Signed-off-by: Luiz Capitulino <lcapitulino@redhat.com>
+---
+ src/usb-ehci.c |    1 +
+ src/usb-ohci.c |    1 +
+ src/usb-uhci.c |    1 +
+ src/usb.c      |    4 ++++
+ src/usb.h      |    2 ++
+ 5 files changed, 9 insertions(+), 0 deletions(-)
+
+diff --git a/src/usb-ehci.c b/src/usb-ehci.c
+index 4e228bd..f11924a 100644
+--- a/src/usb-ehci.c
++++ b/src/usb-ehci.c
+@@ -265,6 +265,7 @@ ehci_init(u16 bdf, int busid, int compbdf)
+     struct usb_ehci_s *cntl = malloc_tmphigh(sizeof(*cntl));
+     memset(cntl, 0, sizeof(*cntl));
+     cntl->usb.busid = busid;
++    cntl->usb.bdf = bdf;
+     cntl->usb.type = USB_TYPE_EHCI;
+     cntl->caps = caps;
+     cntl->regs = (void*)caps + readb(&caps->caplength);
+diff --git a/src/usb-ohci.c b/src/usb-ohci.c
+index 7b975d9..b0dc815 100644
+--- a/src/usb-ohci.c
++++ b/src/usb-ohci.c
+@@ -211,6 +211,7 @@ ohci_init(u16 bdf, int busid)
+     struct usb_ohci_s *cntl = malloc_tmphigh(sizeof(*cntl));
+     memset(cntl, 0, sizeof(*cntl));
+     cntl->usb.busid = busid;
++    cntl->usb.bdf = bdf;
+     cntl->usb.type = USB_TYPE_OHCI;
+ 
+     u32 baseaddr = pci_config_readl(bdf, PCI_BASE_ADDRESS_0);
+diff --git a/src/usb-uhci.c b/src/usb-uhci.c
+index 6549808..40f83bb 100644
+--- a/src/usb-uhci.c
++++ b/src/usb-uhci.c
+@@ -186,6 +186,7 @@ uhci_init(u16 bdf, int busid)
+     struct usb_uhci_s *cntl = malloc_tmphigh(sizeof(*cntl));
+     memset(cntl, 0, sizeof(*cntl));
+     cntl->usb.busid = busid;
++    cntl->usb.bdf = bdf;
+     cntl->usb.type = USB_TYPE_UHCI;
+     cntl->iobase = (pci_config_readl(bdf, PCI_BASE_ADDRESS_4)
+                     & PCI_BASE_ADDRESS_IO_MASK);
+diff --git a/src/usb.c b/src/usb.c
+index 7e6a18b..5e3e97a 100644
+--- a/src/usb.c
++++ b/src/usb.c
+@@ -259,6 +259,7 @@ usb_set_address(struct usbhub_s *hub, int port, int speed)
+         dummy.cntl = cntl;
+         dummy.type = cntl->type;
+         dummy.maxpacket = 8;
++        dummy.path = (u64)-1;
+         cntl->defaultpipe = defpipe = alloc_default_control_pipe(&dummy);
+         if (!defpipe)
+             return NULL;
+@@ -294,6 +295,9 @@ usb_set_address(struct usbhub_s *hub, int port, int speed)
+     defpipe->devaddr = cntl->maxaddr;
+     struct usb_pipe *pipe = alloc_default_control_pipe(defpipe);
+     defpipe->devaddr = 0;
++    if (hub->pipe)
++        pipe->path = hub->pipe->path;
++    pipe->path = (pipe->path << 8) | port;
+     return pipe;
+ }
+ 
+diff --git a/src/usb.h b/src/usb.h
+index f28a3a7..966e94b 100644
+--- a/src/usb.h
++++ b/src/usb.h
+@@ -7,6 +7,7 @@
+ // Information on a USB end point.
+ struct usb_pipe {
+     struct usb_s *cntl;
++    u64 path;
+     u8 type;
+     u8 ep;
+     u8 devaddr;
+@@ -21,6 +22,7 @@ struct usb_s {
+     struct usb_pipe *defaultpipe;
+     struct mutex_s resetlock;
+     int busid;
++    u16 bdf;
+     u8 type;
+     u8 maxaddr;
+ };
+-- 
+1.7.4.rc1.16.gd2f15e
+
