@@ -1,0 +1,126 @@
+From adb570cb9034f647c0be5d1161be0e8699688cfa Mon Sep 17 00:00:00 2001
+From: "Dr. David Alan Gilbert" <dgilbert@redhat.com>
+Date: Wed, 29 Mar 2017 17:22:07 +0200
+Subject: [PATCH] resume: Don't attempt to use generic reboot mechanisms on
+ QEMU
+
+RH-Author: Dr. David Alan Gilbert <dgilbert@redhat.com>
+Message-id: <20170329172207.15471-2-dgilbert@redhat.com>
+Patchwork-id: 74584
+O-Subject: [RHEL-7.4 seabios PATCH 1/1] resume: Don't attempt to use generic reboot mechanisms on QEMU
+Bugzilla: 1428347
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Michael S. Tsirkin <mst@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+On QEMU it's necessary to manually reset the BIOS memory region
+between 0xc0000-0x100000 on a reboot.  After this manual memory reset
+is completed, it's not valid to use the generic reset mechanisms.
+Rename qemu_prep_reset() to qemu_reboot() and change the function to
+immediately reboot after the code memcpy.
+
+This fixes a bug that could cause code corruption on reboots - calling
+the udelay() function (as invoked by i8042_reboot and/or pci_reboot)
+was not valid after the BIOS was memcpy'd.
+
+Reported-by: "Dr. David Alan Gilbert" <dgilbert@redhat.com>
+Tested-by: Dr. David Alan Gilbert <dgilbert@redhat.com>
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+(cherry picked from commit c68aff57ce317d9f2d69d20eba893a10d964f316)
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ src/fw/shadow.c | 14 +++++++++++++-
+ src/hw/pci.c    |  1 -
+ src/hw/pci.h    |  2 ++
+ src/resume.c    |  4 ++--
+ src/util.h      |  2 +-
+ 5 files changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/src/fw/shadow.c b/src/fw/shadow.c
+index cd02d3a..c80b266 100644
+--- a/src/fw/shadow.c
++++ b/src/fw/shadow.c
+@@ -167,7 +167,7 @@ make_bios_readonly(void)
+ }
+ 
+ void
+-qemu_prep_reset(void)
++qemu_reboot(void)
+ {
+     if (!CONFIG_QEMU || runningOnXen())
+         return;
+@@ -187,4 +187,16 @@ qemu_prep_reset(void)
+     memcpy(hrp + 4, hrp + 4 + BIOS_SRC_OFFSET, cend - (hrp + 4));
+     barrier();
+     HaveRunPost = 0;
++    barrier();
++
++    // Request a QEMU system reset.  Do the reset in this function as
++    // the BIOS code was overwritten above and not all BIOS
++    // functionality may be available.
++
++    // Attempt PCI style reset
++    outb(0x02, PORT_PCI_REBOOT);
++    outb(0x06, PORT_PCI_REBOOT);
++
++    // Next try triple faulting the CPU to force a reset
++    asm volatile("int3");
+ }
+diff --git a/src/hw/pci.c b/src/hw/pci.c
+index 506ee56..8e3d617 100644
+--- a/src/hw/pci.c
++++ b/src/hw/pci.c
+@@ -12,7 +12,6 @@
+ #include "x86.h" // outl
+ 
+ #define PORT_PCI_CMD           0x0cf8
+-#define PORT_PCI_REBOOT        0x0cf9
+ #define PORT_PCI_DATA          0x0cfc
+ 
+ void pci_config_writel(u16 bdf, u32 addr, u32 val)
+diff --git a/src/hw/pci.h b/src/hw/pci.h
+index bf50430..ee6e196 100644
+--- a/src/hw/pci.h
++++ b/src/hw/pci.h
+@@ -3,6 +3,8 @@
+ 
+ #include "types.h" // u32
+ 
++#define PORT_PCI_REBOOT        0x0cf9
++
+ static inline u8 pci_bdf_to_bus(u16 bdf) {
+     return bdf >> 8;
+ }
+diff --git a/src/resume.c b/src/resume.c
+index 99fa34f..fb0b8a8 100644
+--- a/src/resume.c
++++ b/src/resume.c
+@@ -125,8 +125,8 @@ tryReboot(void)
+ {
+     dprintf(1, "Attempting a hard reboot\n");
+ 
+-    // Setup for reset on qemu.
+-    qemu_prep_reset();
++    // Use a QEMU specific reboot on QEMU
++    qemu_reboot();
+ 
+     // Reboot using ACPI RESET_REG
+     acpi_reboot();
+diff --git a/src/util.h b/src/util.h
+index 557eb8b..1dfe463 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -122,7 +122,7 @@ void pirtable_setup(void);
+ // fw/shadow.c
+ void make_bios_writable(void);
+ void make_bios_readonly(void);
+-void qemu_prep_reset(void);
++void qemu_reboot(void);
+ 
+ // fw/smbios.c
+ void smbios_legacy_setup(void);
+-- 
+1.8.3.1
+
