@@ -16,6 +16,4 @@ struct romfile_s *romfile_find(const char *name);
 void *romfile_loadfile(const char *name, int *psize);
 u64 romfile_loadint(const char *name, u64 defval);
 
-void const_romfile_add_int(char *name, u32 value);
-
 #endif // romfile.h

@@ -4,10 +4,11 @@
 #include "types.h" // u8
 #include "config.h" // CONFIG_*
 
+#include "cbvga.h" // cbvga_setup
+#include "clext.h" // clext_set_mode
 #include "bochsvga.h" // bochsvga_set_mode
 #include "stdvga.h" // stdvga_set_mode
 #include "geodevga.h" // geodevga_setup
-#include "vgautil.h" // stdvga_list_modes
 
 static inline struct vgamode_s *vgahw_find_mode(int mode) {
     if (CONFIG_VGA_CIRRUS)
@@ -137,12 +138,6 @@ static inline int vgahw_save_restore(int cmd, u16 seg, void *data) {
     if (CONFIG_VGA_COREBOOT)
         return cbvga_save_restore(cmd, seg, data);
     return stdvga_save_restore(cmd, seg, data);
-}
-
-static inline int vgahw_get_linesize(struct vgamode_s *vmode_g) {
-    if (CONFIG_VGA_COREBOOT)
-        return cbvga_get_linesize(vmode_g);
-    return stdvga_get_linesize(vmode_g);
 }
 
 #endif // vgahw.h

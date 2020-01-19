@@ -16,6 +16,7 @@
  *
  */
 
+#include "biosvar.h" // GET_GLOBAL
 #include "output.h" // panic
 #include "virtio-ring.h"
 #include "virtio-pci.h"

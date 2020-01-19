@@ -1,4 +1,4 @@
-From f14103535394ff9d803ec64dfd8b11dd753a45f1 Mon Sep 17 00:00:00 2001
+From 4fee214c41b11b72b3427fda18e9eac1ee647746 Mon Sep 17 00:00:00 2001
 From: Andrea Arcangeli <aarcange@redhat.com>
 Date: Tue, 8 Oct 2013 17:07:23 +0200
 Subject: allow >1TB of RAM
@@ -21,17 +21,16 @@ Signed-off-by: Andrea Arcangeli <aarcange@redhat.com>
  2 files changed, 8 insertions(+), 6 deletions(-)
 
 Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
-(cherry picked from commit 4fee214c41b11b72b3427fda18e9eac1ee647746)
 ---
  src/fw/paravirt.c | 7 ++++---
  src/hw/rtc.h      | 7 ++++---
  2 files changed, 8 insertions(+), 6 deletions(-)
 
 diff --git a/src/fw/paravirt.c b/src/fw/paravirt.c
-index 9674ab8..2de1405 100644
+index 3fae13a..0ad2bd6 100644
 --- a/src/fw/paravirt.c
 +++ b/src/fw/paravirt.c
-@@ -492,9 +492,10 @@ qemu_cfg_e820(void)
+@@ -387,9 +387,10 @@ qemu_cfg_e820(void)
      }
  
      // Check for memory over 4Gig in cmos

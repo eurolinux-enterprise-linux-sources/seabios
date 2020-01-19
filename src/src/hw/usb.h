@@ -22,6 +22,7 @@ struct usb_pipe {
 struct usbdevice_s {
     struct usbhub_s *hub;
     struct usb_pipe *defpipe;
+    u32 slotid;
     u32 port;
     struct usb_config_descriptor *config;
     struct usb_interface_descriptor *iface;
@@ -56,7 +57,6 @@ struct usbhub_s {
 struct usbhub_op_s {
     int (*detect)(struct usbhub_s *hub, u32 port);
     int (*reset)(struct usbhub_s *hub, u32 port);
-    int (*portmap)(struct usbhub_s *hub, u32 port);
     void (*disconnect)(struct usbhub_s *hub, u32 port);
 };
 

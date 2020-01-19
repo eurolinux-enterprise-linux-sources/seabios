@@ -29,22 +29,21 @@ LD32BIT_FLAG:=-melf_i386
 
 # Source files
 SRCBOTH=misc.c stacks.c output.c string.c block.c cdrom.c disk.c mouse.c kbd.c \
-    system.c serial.c sercon.c clock.c resume.c pnpbios.c vgahooks.c pcibios.c \
-    apm.c cp437.c \
+    system.c serial.c clock.c resume.c pnpbios.c vgahooks.c pcibios.c apm.c \
     hw/pci.c hw/timer.c hw/rtc.c hw/dma.c hw/pic.c hw/ps2port.c hw/serialio.c \
     hw/usb.c hw/usb-uhci.c hw/usb-ohci.c hw/usb-ehci.c \
     hw/usb-hid.c hw/usb-msc.c hw/usb-uas.c \
     hw/blockcmd.c hw/floppy.c hw/ata.c hw/ramdisk.c \
-    hw/lsi-scsi.c hw/esp-scsi.c hw/megasas.c hw/mpt-scsi.c
+    hw/lsi-scsi.c hw/esp-scsi.c hw/megasas.c
 SRC16=$(SRCBOTH)
 SRC32FLAT=$(SRCBOTH) post.c e820map.c malloc.c romfile.c x86.c optionroms.c \
     pmm.c font.c boot.c bootsplash.c jpeg.c bmp.c tcgbios.c sha1.c \
-    hw/pcidevice.c hw/ahci.c hw/pvscsi.c hw/usb-xhci.c hw/usb-hub.c hw/sdcard.c \
+    hw/ahci.c hw/pvscsi.c hw/usb-xhci.c hw/usb-hub.c hw/sdcard.c \
     fw/coreboot.c fw/lzmadecode.c fw/multiboot.c fw/csm.c fw/biostables.c \
     fw/paravirt.c fw/shadow.c fw/pciinit.c fw/smm.c fw/smp.c fw/mtrr.c fw/xen.c \
     fw/acpi.c fw/mptable.c fw/pirtable.c fw/smbios.c fw/romfile_loader.c \
     hw/virtio-ring.c hw/virtio-pci.c hw/virtio-blk.c hw/virtio-scsi.c \
-    hw/tpm_drivers.c hw/nvme.c
+    hw/tpm_drivers.c
 SRC32SEG=string.c output.c pcibios.c apm.c stacks.c hw/pci.c hw/serialio.c
 DIRS=src src/hw src/fw vgasrc
 
@@ -64,7 +63,6 @@ COMMONCFLAGS := -I$(OUT) -Isrc -Os -MD -g \
     -freg-struct-return -ffreestanding -fno-delete-null-pointer-checks \
     -ffunction-sections -fdata-sections -fno-common -fno-merge-constants
 COMMONCFLAGS += $(call cc-option,$(CC),-nopie,)
-COMMONCFLAGS += $(call cc-option,$(CC),-fno-pie,)
 COMMONCFLAGS += $(call cc-option,$(CC),-fno-stack-protector,)
 COMMONCFLAGS += $(call cc-option,$(CC),-fno-stack-protector-all,)
 COMMONCFLAGS += $(call cc-option,$(CC),-fstack-check=no,)
@@ -209,7 +207,7 @@ $(OUT)bios.bin.elf: $(OUT)rom.o $(OUT)bios.bin.prep
 
 # VGA src files
 SRCVGA=src/output.c src/string.c src/hw/pci.c src/hw/serialio.c \
-    vgasrc/vgainit.c vgasrc/vgabios.c vgasrc/vgafb.c vgasrc/swcursor.c \
+    vgasrc/vgainit.c vgasrc/vgabios.c vgasrc/vgafb.c \
     vgasrc/vgafonts.c vgasrc/vbe.c \
     vgasrc/stdvga.c vgasrc/stdvgamodes.c vgasrc/stdvgaio.c \
     vgasrc/clext.c vgasrc/bochsvga.c vgasrc/geodevga.c \
@@ -250,7 +248,7 @@ $(OUT)vgabios.bin: $(OUT)vgabios.bin.raw scripts/buildrom.py
 iasl-option=$(shell if test -z "`$(1) $(2) 2>&1 > /dev/null`" \
     ; then echo "$(2)"; else echo "$(3)"; fi ;)
 
-%.hex: %.dsl ./scripts/acpi_extract_preprocess.py ./scripts/acpi_extract.py
+$(OUT)%.hex: %.dsl ./scripts/acpi_extract_preprocess.py ./scripts/acpi_extract.py
 	@echo "  Compiling IASL $@"
 	$(Q)$(CPP) $(CPPFLAGS) $< -o $(OUT)$*.dsl.i.orig
 	$(Q)$(PYTHON) ./scripts/acpi_extract_preprocess.py $(OUT)$*.dsl.i.orig > $(OUT)$*.dsl.i
@@ -258,7 +256,7 @@ iasl-option=$(shell if test -z "`$(1) $(2) 2>&1 > /dev/null`" \
 	$(Q)$(PYTHON) ./scripts/acpi_extract.py $(OUT)$*.lst > $(OUT)$*.off
 	$(Q)cat $(OUT)$*.off > $@
 
-iasl: src/fw/acpi-dsdt.hex src/fw/ssdt-proc.hex src/fw/ssdt-pcihp.hex src/fw/ssdt-misc.hex
+$(OUT)src/fw/acpi.o: $(OUT)src/fw/acpi-dsdt.hex $(OUT)src/fw/ssdt-proc.hex $(OUT)src/fw/ssdt-pcihp.hex $(OUT)src/fw/ssdt-misc.hex $(OUT)src/fw/q35-acpi-dsdt.hex
 
 ################ Kconfig rules
 
@@ -283,4 +281,4 @@ clean:
 distclean: clean
 	$(Q)rm -f .config .config.old
 
--include $(OUT)*.d $(patsubst %,$(OUT)%/*.d,$(DIRS))
+-include $(patsubst %,$(OUT)%/*.d,$(DIRS))

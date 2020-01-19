@@ -8,7 +8,7 @@
 #include "byteorder.h" // be32_to_cpu
 #include "config.h" // CONFIG_*
 #include "e820map.h" // e820_add
-#include "hw/pcidevice.h" // pci_probe_devices
+#include "hw/pci.h" // pci_probe_devices
 #include "lzmadecode.h" // LzmaDecode
 #include "malloc.h" // free
 #include "output.h" // dprintf
@@ -80,12 +80,10 @@ struct cb_cbmem_ref {
 #define CB_TAG_CBMEM_CONSOLE 0x17
 
 struct cbmem_console {
-    u32 size;
-    u32 cursor;
-    u8  body[0];
+    u32 buffer_size;
+    u32 buffer_cursor;
+    u8  buffer_body[0];
 } PACKED;
-#define CBMC_CURSOR_MASK ((1 << 28) - 1)
-#define CBMC_OVERFLOW (1 << 31)
 static struct cbmem_console *cbcon = NULL;
 
 static u16
@@ -222,16 +220,9 @@ void coreboot_debug_putc(char c)
         return;
     if (!cbcon)
         return;
-    u32 cursor = cbcon->cursor & CBMC_CURSOR_MASK;
-    u32 flags = cbcon->cursor & ~CBMC_CURSOR_MASK;
-    if (cursor >= cbcon->size)
-        return; // Old coreboot version with legacy overflow mechanism.
-    cbcon->body[cursor++] = c;
-    if (cursor >= cbcon->size) {
-        cursor = 0;
-        flags |= CBMC_OVERFLOW;
-    }
-    cbcon->cursor = flags | cursor;
+    u32 cursor = cbcon->buffer_cursor++;
+    if (cursor < cbcon->buffer_size)
+        cbcon->buffer_body[cursor] = c;
 }
 
 /****************************************************************

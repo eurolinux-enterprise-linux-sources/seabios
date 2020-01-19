@@ -17,7 +17,6 @@
 #include "string.h" // memset
 #include "util.h" // dma_setup
 #include "tcgbios.h" // tpm_s3_resume
-#include "fw/romfile_loader.h" // romfile_fw_cfg_resume
 
 // Handler for post calls that look like a resume.
 void VISIBLE16
@@ -98,16 +97,12 @@ s3_resume(void)
 
     pic_setup();
     smm_setup();
-    smp_resume();
 
     pci_resume();
 
     /* resume TPM before we may measure option roms */
     tpm_s3_resume();
     s3_resume_vga();
-
-    /* Replay any fw_cfg entries that go back to the host */
-    romfile_fw_cfg_resume();
 
     make_bios_readonly();
 
@@ -119,14 +114,23 @@ s3_resume(void)
     farcall16big(&br);
 }
 
+u8 HaveAttemptedReboot VARLOW;
+
 // Attempt to invoke a hard-reboot.
 static void
 tryReboot(void)
 {
+    if (HaveAttemptedReboot) {
+        // Hard reboot has failed - try to shutdown machine.
+        dprintf(1, "Unable to hard-reboot machine - attempting shutdown.\n");
+        apm_shutdown();
+    }
+    HaveAttemptedReboot = 1;
+
     dprintf(1, "Attempting a hard reboot\n");
 
-    // Use a QEMU specific reboot on QEMU
-    qemu_reboot();
+    // Setup for reset on qemu.
+    qemu_prep_reset();
 
     // Reboot using ACPI RESET_REG
     acpi_reboot();

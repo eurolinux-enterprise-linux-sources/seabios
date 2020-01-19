@@ -1,0 +1,57 @@
+From 01549028733315a513b1b5fcc1951fd271e8a531 Mon Sep 17 00:00:00 2001
+From: Marcel Apfelbaum <marcel@redhat.com>
+Date: Tue, 13 Sep 2016 13:20:45 +0200
+Subject: [PATCH] pci: don't map virtio 1.0 storage devices above 4G
+
+RH-Author: Marcel Apfelbaum <marcel@redhat.com>
+Message-id: <1473772845-913-1-git-send-email-marcel@redhat.com>
+Patchwork-id: 72292
+O-Subject: [RHEL-7.3 seabios PATCH V2] pci: don't map virtio 1.0 storage devices above 4G
+Bugzilla: 1373154
+RH-Acked-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Michael S. Tsirkin <mst@redhat.com>
+
+v1->v2:
+  - add the note to the commit message (Gerd)
+
+BZ: https://bugzilla.redhat.com/show_bug.cgi?id=1373154
+Brew: https://brewweb.engineering.redhat.com/brew/taskinfo?taskID=11741451
+Upstream: Fixed upstream by commit: 0e21548b15 (virtio: pci cfg access)
+Tests: Checked the virtio BARs are placed in the 32-bit range and
+       the guest boots successfully.
+
+Otherwise SeaBIOS can't access virtio's modern BAR.
+
+Note: It works in the master branch but can't be merged easily
+into 1.9 branch, so use this as an interim solution
+until we'll rebase to 1.10.
+
+Signed-off-by: Marcel Apfelbaum <marcel@redhat.com>
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ src/fw/pciinit.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/fw/pciinit.c b/src/fw/pciinit.c
+index 7896600..4ff1262 100644
+--- a/src/fw/pciinit.c
++++ b/src/fw/pciinit.c
+@@ -650,6 +650,13 @@ static void pci_region_migrate_64bit_entries(struct pci_region *from,
+             continue;
+         if (entry->dev->class == PCI_CLASS_SERIAL_USB)
+             continue;
++        if (entry->dev->vendor == PCI_VENDOR_ID_REDHAT_QUMRANET &&
++            (entry->dev->device == PCI_DEVICE_ID_VIRTIO_BLK_09  ||
++             entry->dev->device == PCI_DEVICE_ID_VIRTIO_BLK_10  ||
++             entry->dev->device == PCI_DEVICE_ID_VIRTIO_SCSI_09 ||
++             entry->dev->device == PCI_DEVICE_ID_VIRTIO_SCSI_10))
++            continue;
++
+         // Move from source list to destination list.
+         hlist_del(&entry->node);
+         hlist_add(&entry->node, last);
+-- 
+1.8.3.1
+

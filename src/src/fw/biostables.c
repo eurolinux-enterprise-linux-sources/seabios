@@ -134,8 +134,8 @@ void *find_acpi_rsdp(void)
     return NULL;
 }
 
-void *
-find_acpi_table(u32 signature)
+static struct fadt_descriptor_rev1 *
+find_fadt(void)
 {
     dprintf(4, "rsdp=%p\n", RsdpAddr);
     if (!RsdpAddr || RsdpAddr->signature != RSDP_SIGNATURE)
@@ -147,20 +147,20 @@ find_acpi_table(u32 signature)
     void *end = (void*)rsdt + rsdt->length;
     int i;
     for (i=0; (void*)&rsdt->table_offset_entry[i] < end; i++) {
-        struct acpi_table_header *tbl = (void*)rsdt->table_offset_entry[i];
-        if (!tbl || tbl->signature != signature)
+        struct fadt_descriptor_rev1 *fadt = (void*)rsdt->table_offset_entry[i];
+        if (!fadt || fadt->signature != FACP_SIGNATURE)
             continue;
-        dprintf(4, "table(%x)=%p\n", signature, tbl);
-        return tbl;
+        dprintf(4, "fadt=%p\n", fadt);
+        return fadt;
     }
-    dprintf(4, "no table %x found\n", signature);
+    dprintf(4, "no fadt found\n");
     return NULL;
 }
 
 u32
 find_resume_vector(void)
 {
-    struct fadt_descriptor_rev1 *fadt = find_acpi_table(FACP_SIGNATURE);
+    struct fadt_descriptor_rev1 *fadt = find_fadt();
     if (!fadt)
         return 0;
     struct facs_descriptor_rev1 *facs = (void*)fadt->firmware_ctrl;
@@ -218,7 +218,7 @@ acpi_set_reset_reg(struct acpi_20_generic_address *reg, u8 val)
 void
 find_acpi_features(void)
 {
-    struct fadt_descriptor_rev1 *fadt = find_acpi_table(FACP_SIGNATURE);
+    struct fadt_descriptor_rev1 *fadt = find_fadt();
     if (!fadt)
         return;
     u32 pm_tmr = le32_to_cpu(fadt->pm_tmr_blk);

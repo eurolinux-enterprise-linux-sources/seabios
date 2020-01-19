@@ -1,0 +1,40 @@
+From 8d46a40440ca9a8ea718b9938c82b1848866e0c3 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Tue, 24 Jan 2017 11:41:10 +0100
+Subject: [PATCH 3/4] acpi_extract: Don't generate unused (and empty)
+ q35-acpi-dsdt.hex file
+
+RH-Author: Gerd Hoffmann <kraxel@redhat.com>
+Message-id: <1485258071-13209-4-git-send-email-kraxel@redhat.com>
+Patchwork-id: 73324
+O-Subject: [RHEL-7.3.z seabios PATCH 3/4] acpi_extract: Don't generate unused (and empty) q35-acpi-dsdt.hex file
+Bugzilla: 1400102
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Igor Mammedov <imammedo@redhat.com>
+RH-Acked-by: Miroslav Rezanina <mrezanin@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+(cherry picked from commit b0d3cc36667b68e41ac816caa22802922400e5af)
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 4e4092d..6f1bb68 100644
+--- a/Makefile
++++ b/Makefile
+@@ -256,7 +256,7 @@ $(OUT)%.hex: %.dsl ./scripts/acpi_extract_preprocess.py ./scripts/acpi_extract.p
+ 	$(Q)$(PYTHON) ./scripts/acpi_extract.py $(OUT)$*.lst > $(OUT)$*.off
+ 	$(Q)cat $(OUT)$*.off > $@
+ 
+-$(OUT)src/fw/acpi.o: $(OUT)src/fw/acpi-dsdt.hex $(OUT)src/fw/ssdt-proc.hex $(OUT)src/fw/ssdt-pcihp.hex $(OUT)src/fw/ssdt-misc.hex $(OUT)src/fw/q35-acpi-dsdt.hex
++$(OUT)src/fw/acpi.o: $(OUT)src/fw/acpi-dsdt.hex $(OUT)src/fw/ssdt-proc.hex $(OUT)src/fw/ssdt-pcihp.hex $(OUT)src/fw/ssdt-misc.hex
+ 
+ ################ Kconfig rules
+ 
+-- 
+1.8.3.1
+

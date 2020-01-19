@@ -1,7 +1,7 @@
-From 4d08ebd4f8dc19dfc36495473b34c34d53650632 Mon Sep 17 00:00:00 2001
+From d4b8b97fab7f66875dfc212a7e18f16436d79340 Mon Sep 17 00:00:00 2001
 From: Ladi Prosek <lprosek@redhat.com>
 Date: Mon, 31 Oct 2016 19:33:05 +0100
-Subject: vgabios: Reorder video modes to work around a Windows bug
+Subject: [PATCH] vgabios: Reorder video modes to work around a Windows bug
 
 RH-Author: Ladi Prosek <lprosek@redhat.com>
 Message-id: <1477924385-6169-1-git-send-email-lprosek@redhat.com>
@@ -38,10 +38,10 @@ Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
  1 file changed, 20 insertions(+), 19 deletions(-)
 
 diff --git a/vgasrc/bochsvga.c b/vgasrc/bochsvga.c
-index ec5d101..c5d1511 100644
+index aa82fc5..a43a21f 100644
 --- a/vgasrc/bochsvga.c
 +++ b/vgasrc/bochsvga.c
-@@ -28,6 +28,25 @@ static struct bochsvga_mode
+@@ -27,6 +27,25 @@ static struct bochsvga_mode
      u16 mode;
      struct vgamode_s info;
  } bochsvga_modes[] VAR16 = {
@@ -67,7 +67,7 @@ index ec5d101..c5d1511 100644
      /* standard modes */
      { 0x100, { MM_PACKED, 640,  400,  8,  8, 16, SEG_GRAPH } },
      { 0x101, { MM_PACKED, 640,  480,  8,  8, 16, SEG_GRAPH } },
-@@ -56,50 +75,32 @@ static struct bochsvga_mode
+@@ -55,50 +74,32 @@ static struct bochsvga_mode
      { 0x11D, { MM_DIRECT, 1600, 1200, 15, 8, 16, SEG_GRAPH } },
      { 0x11E, { MM_DIRECT, 1600, 1200, 16, 8, 16, SEG_GRAPH } },
      { 0x11F, { MM_DIRECT, 1600, 1200, 24, 8, 16, SEG_GRAPH } },

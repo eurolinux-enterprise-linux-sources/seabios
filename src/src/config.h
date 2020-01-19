@@ -39,6 +39,8 @@
 #define BUILD_BIOS_ADDR           0xf0000
 #define BUILD_BIOS_SIZE           0x10000
 #define BUILD_EXTRA_STACK_SIZE    0x800
+// 32KB for shadow ram copying (works around emulator deficiencies)
+#define BUILD_BIOS_TMP_ADDR       0x30000
 #define BUILD_SMM_INIT_ADDR       0x30000
 #define BUILD_SMM_ADDR            0xa0000
 
@@ -76,6 +78,7 @@
 #define DEBUG_ISR_08 20
 #define DEBUG_ISR_09 9
 #define DEBUG_ISR_0e 9
+#define DEBUG_HDL_10 20
 #define DEBUG_HDL_11 2
 #define DEBUG_HDL_12 2
 #define DEBUG_HDL_13 10

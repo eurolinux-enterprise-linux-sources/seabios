@@ -12,10 +12,9 @@
 #include "block.h" // struct drive_s
 #include "malloc.h" // free
 #include "output.h" // dprintf
-#include "pcidevice.h" // foreachpci
+#include "pci.h" // foreachpci
 #include "pci_ids.h" // PCI_DEVICE_ID_VIRTIO_BLK
 #include "pci_regs.h" // PCI_VENDOR_ID
-#include "stacks.h" // run_thread
 #include "std/disk.h" // DISK_RET_SUCCESS
 #include "string.h" // memset
 #include "util.h" // usleep
@@ -32,9 +31,9 @@ struct virtiodrive_s {
 static int
 virtio_blk_op(struct disk_op_s *op, int write)
 {
-    struct virtiodrive_s *vdrive =
-        container_of(op->drive_fl, struct virtiodrive_s, drive);
-    struct vring_virtqueue *vq = vdrive->vq;
+    struct virtiodrive_s *vdrive_gf =
+        container_of(op->drive_gf, struct virtiodrive_s, drive);
+    struct vring_virtqueue *vq = vdrive_gf->vq;
     struct virtio_blk_outhdr hdr = {
         .type = write ? VIRTIO_BLK_T_OUT : VIRTIO_BLK_T_IN,
         .ioprio = 0,
@@ -48,7 +47,7 @@ virtio_blk_op(struct disk_op_s *op, int write)
         },
         {
             .addr       = op->buf_fl,
-            .length     = vdrive->drive.blksize * op->count,
+            .length     = vdrive_gf->drive.blksize * op->count,
         },
         {
             .addr       = (void*)(&status),
@@ -61,7 +60,7 @@ virtio_blk_op(struct disk_op_s *op, int write)
         vring_add_buf(vq, sg, 2, 1, 0, 0);
     else
         vring_add_buf(vq, sg, 1, 2, 0, 0);
-    vring_kick(&vdrive->vp, vq, 1);
+    vring_kick(&vdrive_gf->vp, vq, 1);
 
     /* Wait for reply */
     while (!vring_more_used(vq))
@@ -73,7 +72,7 @@ virtio_blk_op(struct disk_op_s *op, int write)
     /* Clear interrupt status register.  Avoid leaving interrupts stuck if
      * VRING_AVAIL_F_NO_INTERRUPT was ignored and interrupts were raised.
      */
-    vp_get_isr(&vdrive->vp);
+    vp_get_isr(&vdrive_gf->vp);
 
     return status == VIRTIO_BLK_S_OK ? DISK_RET_SUCCESS : DISK_RET_EBADTRACK;
 }
@@ -94,23 +93,25 @@ virtio_blk_process_op(struct disk_op_s *op)
 }
 
 static void
-init_virtio_blk(void *data)
+init_virtio_blk(struct pci_device *pci)
 {
-    struct pci_device *pci = data;
+    u16 bdf = pci->bdf;
     u8 status = VIRTIO_CONFIG_S_ACKNOWLEDGE | VIRTIO_CONFIG_S_DRIVER;
-    dprintf(1, "found virtio-blk at %pP\n", pci);
-    struct virtiodrive_s *vdrive = malloc_low(sizeof(*vdrive));
+    dprintf(1, "found virtio-blk at %x:%x\n", pci_bdf_to_bus(bdf),
+            pci_bdf_to_dev(bdf));
+    struct virtiodrive_s *vdrive = malloc_fseg(sizeof(*vdrive));
     if (!vdrive) {
         warn_noalloc();
         return;
     }
     memset(vdrive, 0, sizeof(*vdrive));
     vdrive->drive.type = DTYPE_VIRTIO_BLK;
-    vdrive->drive.cntl_id = pci->bdf;
+    vdrive->drive.cntl_id = bdf;
 
     vp_init_simple(&vdrive->vp, pci);
     if (vp_find_vq(&vdrive->vp, 0, &vdrive->vq) < 0 ) {
-        dprintf(1, "fail to find vq for virtio-blk %pP\n", pci);
+        dprintf(1, "fail to find vq for virtio-blk %x:%x\n",
+                pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
         goto fail;
     }
 
@@ -118,19 +119,20 @@ init_virtio_blk(void *data)
         struct vp_device *vp = &vdrive->vp;
         u64 features = vp_get_features(vp);
         u64 version1 = 1ull << VIRTIO_F_VERSION_1;
-        u64 iommu_platform = 1ull << VIRTIO_F_IOMMU_PLATFORM;
         u64 blk_size = 1ull << VIRTIO_BLK_F_BLK_SIZE;
         if (!(features & version1)) {
-            dprintf(1, "modern device without virtio_1 feature bit: %pP\n", pci);
+            dprintf(1, "modern device without virtio_1 feature bit: %x:%x\n",
+                    pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
             goto fail;
         }
 
-        features = features & (version1 | iommu_platform | blk_size);
+        features = features & (version1 | blk_size);
         vp_set_features(vp, features);
         status |= VIRTIO_CONFIG_S_FEATURES_OK;
         vp_set_status(vp, status);
         if (!(vp_get_status(vp) & VIRTIO_CONFIG_S_FEATURES_OK)) {
-            dprintf(1, "device didn't accept features: %pP\n", pci);
+            dprintf(1, "device didn't accept features: %x:%x\n",
+                    pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
             goto fail;
         }
 
@@ -143,12 +145,14 @@ init_virtio_blk(void *data)
             vdrive->drive.blksize = DISK_SECTOR_SIZE;
         }
         if (vdrive->drive.blksize != DISK_SECTOR_SIZE) {
-            dprintf(1, "virtio-blk %pP block size %d is unsupported\n",
-                    pci, vdrive->drive.blksize);
+            dprintf(1, "virtio-blk %x:%x block size %d is unsupported\n",
+                    pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf),
+                    vdrive->drive.blksize);
             goto fail;
         }
-        dprintf(3, "virtio-blk %pP blksize=%d sectors=%u\n",
-                pci, vdrive->drive.blksize, (u32)vdrive->drive.sectors);
+        dprintf(3, "virtio-blk %x:%x blksize=%d sectors=%u\n",
+                pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf),
+                vdrive->drive.blksize, (u32)vdrive->drive.sectors);
 
         vdrive->drive.pchs.cylinder =
             vp_read(&vp->device, struct virtio_blk_config, cylinders);
@@ -165,12 +169,14 @@ init_virtio_blk(void *data)
             cfg.blk_size : DISK_SECTOR_SIZE;
 
         vdrive->drive.sectors = cfg.capacity;
-        dprintf(3, "virtio-blk %pP blksize=%d sectors=%u\n",
-                pci, vdrive->drive.blksize, (u32)vdrive->drive.sectors);
+        dprintf(3, "virtio-blk %x:%x blksize=%d sectors=%u\n",
+                pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf),
+                vdrive->drive.blksize, (u32)vdrive->drive.sectors);
 
         if (vdrive->drive.blksize != DISK_SECTOR_SIZE) {
-            dprintf(1, "virtio-blk %pP block size %d is unsupported\n",
-                    pci, vdrive->drive.blksize);
+            dprintf(1, "virtio-blk %x:%x block size %d is unsupported\n",
+                    pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf),
+                    vdrive->drive.blksize);
             goto fail;
         }
         vdrive->drive.pchs.cylinder = cfg.cylinders;
@@ -178,7 +184,9 @@ init_virtio_blk(void *data)
         vdrive->drive.pchs.sector = cfg.sectors;
     }
 
-    char *desc = znprintf(MAXDESCSIZE, "Virtio disk PCI:%pP", pci);
+    char *desc = znprintf(MAXDESCSIZE, "Virtio disk PCI:%x:%x",
+                          pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
+
     boot_add_hd(&vdrive->drive, desc, bootprio_find_pci_device(pci));
 
     status |= VIRTIO_CONFIG_S_DRIVER_OK;
@@ -206,6 +214,6 @@ virtio_blk_setup(void)
             (pci->device != PCI_DEVICE_ID_VIRTIO_BLK_09 &&
              pci->device != PCI_DEVICE_ID_VIRTIO_BLK_10))
             continue;
-        run_thread(init_virtio_blk, pci);
+        init_virtio_blk(pci);
     }
 }

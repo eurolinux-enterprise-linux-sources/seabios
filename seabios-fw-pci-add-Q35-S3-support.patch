@@ -1,0 +1,167 @@
+From 64181e8938e1ebb31375bfb5372190a2f3f1ad60 Mon Sep 17 00:00:00 2001
+From: Marcel Apfelbaum <marcel@redhat.com>
+Date: Thu, 31 Mar 2016 16:19:03 +0200
+Subject: [PATCH] fw/pci: add Q35 S3 support
+
+RH-Author: Marcel Apfelbaum <marcel@redhat.com>
+Message-id: <1459441143-24378-1-git-send-email-marcel@redhat.com>
+Patchwork-id: 69965
+O-Subject: [RHEL-7.3 seabios PATCH] fw/pci: add Q35 S3 support
+Bugzilla: 1185721
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+
+Following the i440fx example, save the LPC, SMBUS and PCIEXBAR bdfs
+between OS sleeps and use them to re-configure the
+corresponding registers.
+
+Tested-by: Gal Hammer <ghammer@redhat.com>
+Reviewed-by: Laszlo Ersek <lersek@redhat.com>
+Signed-off-by: Marcel Apfelbaum <marcel@redhat.com>
+(cherry picked from commit dce99e01b6bfc51175bdf32612fd4f2738e5c3c8)
+Signed-off-by: Marcel Apfelbaum <marcel@redhat.com>
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ src/fw/pciinit.c | 73 +++++++++++++++++++++++++++++++++++++++++++-------------
+ 1 file changed, 56 insertions(+), 17 deletions(-)
+
+diff --git a/src/fw/pciinit.c b/src/fw/pciinit.c
+index c31c2fa..7896600 100644
+--- a/src/fw/pciinit.c
++++ b/src/fw/pciinit.c
+@@ -149,6 +149,22 @@ static void piix_isa_bridge_setup(struct pci_device *pci, void *arg)
+     dprintf(1, "PIIX3/PIIX4 init: elcr=%02x %02x\n", elcr[0], elcr[1]);
+ }
+ 
++static void mch_isa_lpc_setup(u16 bdf)
++{
++    /* pm io base */
++    pci_config_writel(bdf, ICH9_LPC_PMBASE,
++                      acpi_pm_base | ICH9_LPC_PMBASE_RTE);
++
++    /* acpi enable, SCI: IRQ9 000b = irq9*/
++    pci_config_writeb(bdf, ICH9_LPC_ACPI_CTRL, ICH9_LPC_ACPI_CTRL_ACPI_EN);
++
++    /* set root complex register block BAR */
++    pci_config_writel(bdf, ICH9_LPC_RCBA,
++                      ICH9_LPC_RCBA_ADDR | ICH9_LPC_RCBA_EN);
++}
++
++static int ICH9LpcBDF = -1;
++
+ /* ICH9 LPC PCI to ISA bridge */
+ /* PCI_VENDOR_ID_INTEL && PCI_DEVICE_ID_INTEL_ICH9_LPC */
+ static void mch_isa_bridge_setup(struct pci_device *dev, void *arg)
+@@ -176,16 +192,10 @@ static void mch_isa_bridge_setup(struct pci_device *dev, void *arg)
+     outb(elcr[1], ICH9_LPC_PORT_ELCR2);
+     dprintf(1, "Q35 LPC init: elcr=%02x %02x\n", elcr[0], elcr[1]);
+ 
+-    /* pm io base */
+-    pci_config_writel(bdf, ICH9_LPC_PMBASE,
+-                      acpi_pm_base | ICH9_LPC_PMBASE_RTE);
++    ICH9LpcBDF = bdf;
+ 
+-    /* acpi enable, SCI: IRQ9 000b = irq9*/
+-    pci_config_writeb(bdf, ICH9_LPC_ACPI_CTRL, ICH9_LPC_ACPI_CTRL_ACPI_EN);
++    mch_isa_lpc_setup(bdf);
+ 
+-    /* set root complex register block BAR */
+-    pci_config_writel(bdf, ICH9_LPC_RCBA,
+-                      ICH9_LPC_RCBA_ADDR | ICH9_LPC_RCBA_EN);
+     e820_add(ICH9_LPC_RCBA_ADDR, 16*1024, E820_RESERVED);
+ 
+     acpi_pm1a_cnt = acpi_pm_base + 0x04;
+@@ -244,11 +254,8 @@ static void piix4_pm_setup(struct pci_device *pci, void *arg)
+     pmtimer_setup(acpi_pm_base + 0x08);
+ }
+ 
+-/* ICH9 SMBUS */
+-/* PCI_VENDOR_ID_INTEL && PCI_DEVICE_ID_INTEL_ICH9_SMBUS */
+-static void ich9_smbus_setup(struct pci_device *dev, void *arg)
++static void ich9_smbus_enable(u16 bdf)
+ {
+-    u16 bdf = dev->bdf;
+     /* map smbus into io space */
+     pci_config_writel(bdf, ICH9_SMB_SMB_BASE,
+                       (acpi_pm_base + 0x100) | PCI_BASE_ADDRESS_SPACE_IO);
+@@ -257,6 +264,17 @@ static void ich9_smbus_setup(struct pci_device *dev, void *arg)
+     pci_config_writeb(bdf, ICH9_SMB_HOSTC, ICH9_SMB_HOSTC_HST_EN);
+ }
+ 
++static int ICH9SmbusBDF = -1;
++
++/* ICH9 SMBUS */
++/* PCI_VENDOR_ID_INTEL && PCI_DEVICE_ID_INTEL_ICH9_SMBUS */
++static void ich9_smbus_setup(struct pci_device *dev, void *arg)
++{
++    ICH9SmbusBDF = dev->bdf;
++
++    ich9_smbus_enable(dev->bdf);
++}
++
+ static const struct pci_device_id pci_device_tbl[] = {
+     /* PIIX3/PIIX4 PCI to ISA bridge */
+     PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_0,
+@@ -293,6 +311,9 @@ static const struct pci_device_id pci_device_tbl[] = {
+     PCI_DEVICE_END,
+ };
+ 
++static int MCHMmcfgBDF = -1;
++static void mch_mmconfig_setup(u16 bdf);
++
+ void pci_resume(void)
+ {
+     if (!CONFIG_QEMU) {
+@@ -302,6 +323,18 @@ void pci_resume(void)
+     if (PiixPmBDF >= 0) {
+         piix4_pm_config_setup(PiixPmBDF);
+     }
++
++    if (ICH9LpcBDF >= 0) {
++        mch_isa_lpc_setup(ICH9LpcBDF);
++    }
++
++    if (ICH9SmbusBDF >= 0) {
++        ich9_smbus_enable(ICH9SmbusBDF);
++    }
++
++    if(MCHMmcfgBDF >= 0) {
++        mch_mmconfig_setup(MCHMmcfgBDF);
++    }
+ }
+ 
+ static void pci_bios_init_device(struct pci_device *pci)
+@@ -388,18 +421,24 @@ static void i440fx_mem_addr_setup(struct pci_device *dev, void *arg)
+     pci_slot_get_irq = piix_pci_slot_get_irq;
+ }
+ 
+-static void mch_mem_addr_setup(struct pci_device *dev, void *arg)
++static void mch_mmconfig_setup(u16 bdf)
+ {
+     u64 addr = Q35_HOST_BRIDGE_PCIEXBAR_ADDR;
+-    u32 size = Q35_HOST_BRIDGE_PCIEXBAR_SIZE;
+-
+-    /* setup mmconfig */
+-    u16 bdf = dev->bdf;
+     u32 upper = addr >> 32;
+     u32 lower = (addr & 0xffffffff) | Q35_HOST_BRIDGE_PCIEXBAREN;
+     pci_config_writel(bdf, Q35_HOST_BRIDGE_PCIEXBAR, 0);
+     pci_config_writel(bdf, Q35_HOST_BRIDGE_PCIEXBAR + 4, upper);
+     pci_config_writel(bdf, Q35_HOST_BRIDGE_PCIEXBAR, lower);
++}
++
++static void mch_mem_addr_setup(struct pci_device *dev, void *arg)
++{
++    u64 addr = Q35_HOST_BRIDGE_PCIEXBAR_ADDR;
++    u32 size = Q35_HOST_BRIDGE_PCIEXBAR_SIZE;
++
++    /* setup mmconfig */
++    MCHMmcfgBDF = dev->bdf;
++    mch_mmconfig_setup(dev->bdf);
+     e820_add(addr, size, E820_RESERVED);
+ 
+     /* setup pci i/o window (above mmconfig) */
+-- 
+1.8.3.1
+

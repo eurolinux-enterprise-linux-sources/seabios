@@ -1,6 +1,6 @@
 Name:           seabios
-Version:        1.11.0
-Release:        2%{?dist}
+Version:        1.9.1
+Release:        5%{?dist}.2
 Summary:        Open-source legacy BIOS implementation
 
 Group:          Applications/Emulators
@@ -8,7 +8,7 @@ License:        LGPLv3
 URL:            http://www.coreboot.org/SeaBIOS
 
 
-Source0: https://code.coreboot.org/p/seabios/downloads/get/seabios-1.11.0.tar.gz
+Source0:        http://code.coreboot.org/p/seabios/downloads/get/%{name}-%{version}.tar.gz
 
 Source10:       config.vga.cirrus
 Source11:       config.vga.isavga
@@ -23,10 +23,22 @@ Source17:       config.vga.virtio
 Patch0002: 0002-allow-1TB-of-RAM.patch
 Patch0003: 0003-smbios-set-bios-vendor-version-fields-to-Seabios-0.5.patch
 Patch0004: 0004-Workaround-for-a-win8.1-32-S4-resume-bug.patch
-Patch0005: 0005-redhat-reserve-more-memory-on-fseg.patch
-Patch0006: 0006-vgabios-Reorder-video-modes-to-work-around-a-Windows.patch
-# For bz#1523166 - [Q35] guest kernel panic when boot with 9 nics
-Patch7: seabios-pci-fix-io-hints-capability-for-RedHat-PCI-bridges.patch
+# For bz#1185721 - win7 guest (boot with q35) show dark screen after do S3
+Patch5: seabios-fw-pci-add-Q35-S3-support.patch
+# For bz#1327060 - [Seabios]Limited boot number supported for SCSI/SATA
+Patch6: seabios-redhat-reserve-more-memory-on-fseg.patch
+# For bz#1373154 - Guest fails boot up with ivshmem-plain and virtio-pci device
+Patch7: seabios-pci-don-t-map-virtio-1.0-storage-devices-above-4G.patch
+# For bz#1392028 - [virtio-win][svvp][ws2016] cannot generate dump file when using nmi on ws2016 and win10-32/64
+Patch8: seabios-vgabios-Reorder-video-modes-to-work-around-a-Windows.patch
+# For bz#1400102 - decouple the SeaBIOS build from iasl
+Patch9: seabios-acpi_extract-Move-main-code-to-new-function-main.patch
+# For bz#1400102 - decouple the SeaBIOS build from iasl
+Patch10: seabios-acpi_extract-Make-the-generated-.hex-files-more-huma.patch
+# For bz#1400102 - decouple the SeaBIOS build from iasl
+Patch11: seabios-acpi_extract-Don-t-generate-unused-and-empty-q35-acp.patch
+# For bz#1400102 - decouple the SeaBIOS build from iasl
+Patch12: seabios-acpi-Don-t-build-SSDT-files-on-every-build-store-the.patch
 BuildRequires: python iasl
 ExclusiveArch: x86_64 %{power64}
 
@@ -80,9 +92,16 @@ SeaVGABIOS is an open-source VGABIOS implementation.
 %patch0002 -p1
 %patch0003 -p1
 %patch0004 -p1
-%patch0005 -p1
-%patch0006 -p1
+%patch5 -p1
+%patch6 -p1
 %patch7 -p1
+%patch8 -p1
+%patch9 -p1
+%patch10 -p1
+%patch11 -p1
+%patch12 -p1
+
+# Store version to be used
 
 %build
 %ifarch x86_64
@@ -135,61 +154,13 @@ install -m 0644 binaries/vgabios*.bin $RPM_BUILD_ROOT%{_datadir}/seavgabios
 %endif
 
 %changelog
-* Tue Jan 30 2018 Miroslav Rezanina <mrezanin@redhat.com> - 1.11.0-2.el7
-- seabios-pci-fix-io-hints-capability-for-RedHat-PCI-bridges.patch [bz#1523166]
-- Resolves: bz#1523166
-  ([Q35] guest kernel panic when boot with 9 nics)
-
-* Wed Nov 15 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.11.0-1.el7
-- Rebase to 1.11.0 [bz#1470751]
-- Resolves: bz#1470751
-  (Rebase seabios for RHEL-7.5)
-
-* Fri Oct 20 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.10.2-5.el7
-- seabios-boot-Rename-drive_g-to-drive.patch [bz#1452603]
-- seabios-disk-Don-t-require-the-struct-drive_s-to-be-in-the-f.patch [bz#1452603]
-- seabios-block-Rename-disk_op_s-drive_gf-to-drive_fl.patch [bz#1452603]
-- seabios-virtio-Allocate-drive_s-storage-in-low-memory.patch [bz#1452603]
-- Resolves: bz#1452603
-  (can't bootup from image when attached multi-virtio-scsi disks with multi-luns)
-
-* Thu Sep 28 2017 Wainer dos Santos Moschetta <wainersm@redhat.com> - 1.10.2-4.el7
-- seabios-virtio-IOMMU-support.patch [bz#1463163, bz#1467811]
-- Resolves: bz#1463163
-  (Guest OS will down when disk enable the IOMMU for Virtio)
-- Resolves: bz#1467811
-  (Guest OS will down when disk enable the IOMMU for virtio-scsi)
-
-* Fri May 12 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.10.2-3.el7
-- seabios-blockcmd-accept-only-disks-and-CD-ROMs.patch [bz#1020622]
-- seabios-blockcmd-generic-SCSI-luns-enumeration.patch [bz#1020622]
-- seabios-virtio-scsi-enumerate-luns-with-REPORT-LUNS.patch [bz#1020622]
-- seabios-usb-uas-enumerate-luns-with-REPORT-LUNS.patch [bz#1020622]
-- Resolves: bz#1020622
-  (seabios fail to recognize virtio-scsi device if specify LUN not 0)
-
-* Thu Mar 30 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.10.2-2.el7
-- seabios-resume-Don-t-attempt-to-use-generic-reboot-mechanism.patch [bz#1428347]
-- Resolves: bz#1428347
-  (reboot hangs on rhel6 machine types (~1/20 times))
-
-* Fri Mar 10 2017 Miroslav Rezanina <mrezanin@redhta.com> - 1.10.2-1.el7
-- Rebase to 1.10.2 [bz#1392821]
-- Resolves:  bz#1392821
- (Rebase seabios to 1.10.1)
-
-* Fri Feb 03 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.10.1-2.el7
-- seabios-smm-disable-by-default.patch [bz#1378006]
-- seabios-ahci-Set-upper-32-bit-registers-to-zero.patch [bz#1418320]
-- Resolves: bz#1378006
-  (guest paused on target host sometimes when do migration during guest boot)
-- Resolves: bz#1418320
-  (Seabios does not fully reset AHCI adapters)
-
-* Tue Jan 10 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.10.1-1.el7
-- Rebase to seabios 1.10.1 [bz#1392821]
-- Resolves: bz#1392821
-  (Rebase seabios to 1.10.1)
+* Fri Feb 10 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.9.1-5.el7_3.2
+- seabios-acpi_extract-Move-main-code-to-new-function-main.patch [bz#1400102]
+- seabios-acpi_extract-Make-the-generated-.hex-files-more-huma.patch [bz#1400102]
+- seabios-acpi_extract-Don-t-generate-unused-and-empty-q35-acp.patch [bz#1400102]
+- seabios-acpi-Don-t-build-SSDT-files-on-every-build-store-the.patch [bz#1400102]
+- Resolves: bz#1400102
+  (decouple the SeaBIOS build from iasl)
 
 * Tue Nov 29 2016 Miroslav Rezanina <mrezanin@redhat.com> - 1.9.1-5.el7_3.1
 - seabios-vgabios-Reorder-video-modes-to-work-around-a-Windows.patch [bz#1392028]

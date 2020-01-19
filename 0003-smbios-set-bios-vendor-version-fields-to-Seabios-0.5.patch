@@ -1,4 +1,4 @@
-From dc14406bae91025709995342c1297d4e2c325498 Mon Sep 17 00:00:00 2001
+From bf361def4623ac1942512f255e5c1450970b5092 Mon Sep 17 00:00:00 2001
 From: Gerd Hoffmann <kraxel@redhat.com>
 Date: Mon, 28 Jul 2014 12:14:11 +0200
 Subject: smbios: set bios vendor/version fields to Seabios/0.5.1
@@ -21,7 +21,6 @@ which we are using here for backward compatibility reasons.
 
 Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
 Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
-(cherry picked from commit bf361def4623ac1942512f255e5c1450970b5092)
 ---
  src/fw/smbios.c | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)

@@ -13,8 +13,7 @@
 #include "hw/pci_regs.h" // PCI_BASE_ADDRESS_0
 #include "output.h" // dprintf
 #include "stdvga.h" // stdvga_crtc_write
-#include "vgabios.h" // SET_VGA
-#include "vgautil.h" // VBE_total_memory
+#include "vgabios.h" // VGAREG_*
 
 
 /****************************************************************

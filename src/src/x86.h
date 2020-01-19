@@ -68,7 +68,6 @@ static inline void wbinvd(void)
 #define CPUID_MSR (1 << 5)
 #define CPUID_APIC (1 << 9)
 #define CPUID_MTRR (1 << 12)
-#define CPUID_X2APIC (1 << 21)
 static inline void __cpuid(u32 index, u32 *eax, u32 *ebx, u32 *ecx, u32 *edx)
 {
     asm("cpuid"
@@ -258,10 +257,9 @@ static inline u8 get_a20(void) {
 }
 
 static inline u8 set_a20(u8 cond) {
-    u8 val = inb(PORT_A20), a20_enabled = (val & A20_ENABLE_BIT) != 0;
-    if (a20_enabled != !!cond)
-        outb(val ^ A20_ENABLE_BIT, PORT_A20);
-    return a20_enabled;
+    u8 val = inb(PORT_A20);
+    outb((val & ~A20_ENABLE_BIT) | (cond ? A20_ENABLE_BIT : 0), PORT_A20);
+    return (val & A20_ENABLE_BIT) != 0;
 }
 
 // x86.c

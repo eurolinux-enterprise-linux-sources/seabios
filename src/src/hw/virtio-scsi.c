@@ -7,15 +7,15 @@
 //
 // This file may be distributed under the terms of the GNU LGPLv3 license.
 
+#include "biosvar.h" // GET_GLOBALFLAT
 #include "block.h" // struct drive_s
 #include "blockcmd.h" // scsi_drive_setup
 #include "config.h" // CONFIG_*
 #include "malloc.h" // free
 #include "output.h" // dprintf
-#include "pcidevice.h" // foreachpci
+#include "pci.h" // foreachpci
 #include "pci_ids.h" // PCI_DEVICE_ID_VIRTIO_BLK
 #include "pci_regs.h" // PCI_VENDOR_ID
-#include "stacks.h" // run_thread
 #include "std/disk.h" // DISK_RET_SUCCESS
 #include "string.h" // memset
 #include "util.h" // usleep
@@ -38,7 +38,7 @@ virtio_scsi_process_op(struct disk_op_s *op)
     if (! CONFIG_VIRTIO_SCSI)
         return 0;
     struct virtio_lun_s *vlun =
-        container_of(op->drive_fl, struct virtio_lun_s, drive);
+        container_of(op->drive_gf, struct virtio_lun_s, drive);
     struct vp_device *vp = vlun->vp;
     struct vring_virtqueue *vq = vlun->vq;
     struct virtio_scsi_req_cmd req;
@@ -93,11 +93,15 @@ virtio_scsi_process_op(struct disk_op_s *op)
     return DISK_RET_EBADTRACK;
 }
 
-static void
-virtio_scsi_init_lun(struct virtio_lun_s *vlun, struct pci_device *pci,
-                     struct vp_device *vp, struct vring_virtqueue *vq,
-                     u16 target, u16 lun)
+static int
+virtio_scsi_add_lun(struct pci_device *pci, struct vp_device *vp,
+                    struct vring_virtqueue *vq, u16 target, u16 lun)
 {
+    struct virtio_lun_s *vlun = malloc_fseg(sizeof(*vlun));
+    if (!vlun) {
+        warn_noalloc();
+        return -1;
+    }
     memset(vlun, 0, sizeof(*vlun));
     vlun->drive.type = DTYPE_VIRTIO_SCSI;
     vlun->drive.cntl_id = pci->bdf;
@@ -106,22 +110,8 @@ virtio_scsi_init_lun(struct virtio_lun_s *vlun, struct pci_device *pci,
     vlun->vq = vq;
     vlun->target = target;
     vlun->lun = lun;
-}
 
-static int
-virtio_scsi_add_lun(u32 lun, struct drive_s *tmpl_drv)
-{
-    struct virtio_lun_s *tmpl_vlun =
-        container_of(tmpl_drv, struct virtio_lun_s, drive);
-    struct virtio_lun_s *vlun = malloc_low(sizeof(*vlun));
-    if (!vlun) {
-        warn_noalloc();
-        return -1;
-    }
-    virtio_scsi_init_lun(vlun, tmpl_vlun->pci, tmpl_vlun->vp, tmpl_vlun->vq,
-                         tmpl_vlun->target, lun);
-
-    int prio = bootprio_find_scsi_device(vlun->pci, vlun->target, vlun->lun);
+    int prio = bootprio_find_scsi_device(pci, target, lun);
     int ret = scsi_drive_setup(&vlun->drive, "virtio-scsi", prio);
     if (ret)
         goto fail;
@@ -136,20 +126,17 @@ static int
 virtio_scsi_scan_target(struct pci_device *pci, struct vp_device *vp,
                         struct vring_virtqueue *vq, u16 target)
 {
-
-    struct virtio_lun_s vlun0;
-
-    virtio_scsi_init_lun(&vlun0, pci, vp, vq, target, 0);
-
-    int ret = scsi_rep_luns_scan(&vlun0.drive, virtio_scsi_add_lun);
-    return ret < 0 ? 0 : ret;
+    /* TODO: send REPORT LUNS.  For now, only LUN 0 is recognized.  */
+    int ret = virtio_scsi_add_lun(pci, vp, vq, target, 0);
+    return ret < 0 ? 0 : 1;
 }
 
 static void
-init_virtio_scsi(void *data)
+init_virtio_scsi(struct pci_device *pci)
 {
-    struct pci_device *pci = data;
-    dprintf(1, "found virtio-scsi at %pP\n", pci);
+    u16 bdf = pci->bdf;
+    dprintf(1, "found virtio-scsi at %x:%x\n", pci_bdf_to_bus(bdf),
+            pci_bdf_to_dev(bdf));
     struct vring_virtqueue *vq = NULL;
     struct vp_device *vp = malloc_high(sizeof(*vp));
     if (!vp) {
@@ -162,23 +149,25 @@ init_virtio_scsi(void *data)
     if (vp->use_modern) {
         u64 features = vp_get_features(vp);
         u64 version1 = 1ull << VIRTIO_F_VERSION_1;
-        u64 iommu_platform = 1ull << VIRTIO_F_IOMMU_PLATFORM;
         if (!(features & version1)) {
-            dprintf(1, "modern device without virtio_1 feature bit: %pP\n", pci);
+            dprintf(1, "modern device without virtio_1 feature bit: %x:%x\n",
+                    pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
             goto fail;
         }
 
-        vp_set_features(vp, features & (version1 | iommu_platform));
+        vp_set_features(vp, version1);
         status |= VIRTIO_CONFIG_S_FEATURES_OK;
         vp_set_status(vp, status);
         if (!(vp_get_status(vp) & VIRTIO_CONFIG_S_FEATURES_OK)) {
-            dprintf(1, "device didn't accept features: %pP\n", pci);
+            dprintf(1, "device didn't accept features: %x:%x\n",
+                    pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
             goto fail;
         }
     }
 
     if (vp_find_vq(vp, 2, &vq) < 0 ) {
-        dprintf(1, "fail to find vq for virtio-scsi %pP\n", pci);
+        dprintf(1, "fail to find vq for virtio-scsi %x:%x\n",
+                pci_bdf_to_bus(bdf), pci_bdf_to_dev(bdf));
         goto fail;
     }
 
@@ -215,6 +204,6 @@ virtio_scsi_setup(void)
             (pci->device != PCI_DEVICE_ID_VIRTIO_SCSI_09 &&
              pci->device != PCI_DEVICE_ID_VIRTIO_SCSI_10))
             continue;
-        run_thread(init_virtio_scsi, pci);
+        init_virtio_scsi(pci);
     }
 }

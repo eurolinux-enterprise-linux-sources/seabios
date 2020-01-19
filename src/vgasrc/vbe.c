@@ -12,14 +12,8 @@
 #include "output.h" // dprintf
 #include "std/vbe.h" // struct vbe_info
 #include "string.h" // memset_far
-#include "vgabios.h" // get_current_mode
+#include "vgabios.h" // handle_104f
 #include "vgahw.h" // vgahw_set_mode
-#include "vgautil.h" // handle_104f
-
-#define VBE_OEM_STRING "SeaBIOS VBE(C) 2011"
-#define VBE_VENDOR_STRING "SeaBIOS Developers"
-#define VBE_PRODUCT_STRING "SeaBIOS VBE Adapter"
-#define VBE_REVISION_STRING "Rev. 1"
 
 u32 VBE_total_memory VAR16 = 256 * 1024;
 u32 VBE_capabilities VAR16;
@@ -107,7 +101,7 @@ vbe_104f01(struct bregs *regs)
     // Basic information about mode.
     int width = GET_GLOBAL(vmode_g->width);
     int height = GET_GLOBAL(vmode_g->height);
-    int linesize = vgahw_get_linesize(vmode_g);
+    int linesize = DIV_ROUND_UP(width * vga_bpp(vmode_g), 8);
     SET_FARVAR(seg, info->bytes_per_scanline, linesize);
     SET_FARVAR(seg, info->xres, width);
     SET_FARVAR(seg, info->yres, height);

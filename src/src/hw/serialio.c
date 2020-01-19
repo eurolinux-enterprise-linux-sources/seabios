@@ -17,44 +17,20 @@
 
 #define DEBUG_TIMEOUT 100000
 
-// Write to a serial port register
-static void
-serial_debug_write(u8 offset, u8 val)
-{
-    if (CONFIG_DEBUG_SERIAL) {
-        outb(val, CONFIG_DEBUG_SERIAL_PORT + offset);
-    } else if (CONFIG_DEBUG_SERIAL_MMIO) {
-        ASSERT32FLAT();
-        writeb((void*)CONFIG_DEBUG_SERIAL_MEM_ADDRESS + 4*offset, val);
-    }
-}
-
-// Read from a serial port register
-static u8
-serial_debug_read(u8 offset)
-{
-    if (CONFIG_DEBUG_SERIAL)
-        return inb(CONFIG_DEBUG_SERIAL_PORT + offset);
-    if (CONFIG_DEBUG_SERIAL_MMIO) {
-        ASSERT32FLAT();
-        return readb((void*)CONFIG_DEBUG_SERIAL_MEM_ADDRESS + 4*offset);
-    }
-}
-
 // Setup the debug serial port for output.
 void
 serial_debug_preinit(void)
 {
-    if (!CONFIG_DEBUG_SERIAL && (!CONFIG_DEBUG_SERIAL_MMIO || MODESEGMENT))
+    if (!CONFIG_DEBUG_SERIAL)
         return;
     // setup for serial logging: 8N1
     u8 oldparam, newparam = 0x03;
-    oldparam = serial_debug_read(SEROFF_LCR);
-    serial_debug_write(SEROFF_LCR, newparam);
+    oldparam = inb(CONFIG_DEBUG_SERIAL_PORT+SEROFF_LCR);
+    outb(newparam, CONFIG_DEBUG_SERIAL_PORT+SEROFF_LCR);
     // Disable irqs
     u8 oldier, newier = 0;
-    oldier = serial_debug_read(SEROFF_IER);
-    serial_debug_write(SEROFF_IER, newier);
+    oldier = inb(CONFIG_DEBUG_SERIAL_PORT+SEROFF_IER);
+    outb(newier, CONFIG_DEBUG_SERIAL_PORT+SEROFF_IER);
 
     if (oldparam != newparam || oldier != newier)
         dprintf(1, "Changing serial settings was %x/%x now %x/%x\n"
@@ -65,14 +41,14 @@ serial_debug_preinit(void)
 static void
 serial_debug(char c)
 {
-    if (!CONFIG_DEBUG_SERIAL && (!CONFIG_DEBUG_SERIAL_MMIO || MODESEGMENT))
+    if (!CONFIG_DEBUG_SERIAL)
         return;
     int timeout = DEBUG_TIMEOUT;
-    while ((serial_debug_read(SEROFF_LSR) & 0x20) != 0x20)
+    while ((inb(CONFIG_DEBUG_SERIAL_PORT+SEROFF_LSR) & 0x20) != 0x20)
         if (!timeout--)
             // Ran out of time.
             return;
-    serial_debug_write(SEROFF_DATA, c);
+    outb(c, CONFIG_DEBUG_SERIAL_PORT+SEROFF_DATA);
 }
 
 void
@@ -87,10 +63,10 @@ serial_debug_putc(char c)
 void
 serial_debug_flush(void)
 {
-    if (!CONFIG_DEBUG_SERIAL && (!CONFIG_DEBUG_SERIAL_MMIO || MODESEGMENT))
+    if (!CONFIG_DEBUG_SERIAL)
         return;
     int timeout = DEBUG_TIMEOUT;
-    while ((serial_debug_read(SEROFF_LSR) & 0x60) != 0x60)
+    while ((inb(CONFIG_DEBUG_SERIAL_PORT+SEROFF_LSR) & 0x60) != 0x60)
         if (!timeout--)
             // Ran out of time.
             return;

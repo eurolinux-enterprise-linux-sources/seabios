@@ -12,8 +12,7 @@
 #include "byteorder.h" // be16_to_cpu
 #include "malloc.h" // malloc_fseg
 #include "output.h" // dprintf
-#include "pci.h" // pci_config_readb
-#include "pcidevice.h" // foreachpci
+#include "pci.h" // foreachpci
 #include "pci_ids.h" // PCI_CLASS_STORAGE_OTHER
 #include "pci_regs.h" // PCI_INTERRUPT_LINE
 #include "pic.h" // enable_hwirq
@@ -271,15 +270,15 @@ fail:
  ****************************************************************/
 
 // Transfer 'op->count' blocks (of 'blocksize' bytes) to/from drive
-// 'op->drive_fl'.
+// 'op->drive_gf'.
 static int
 ata_pio_transfer(struct disk_op_s *op, int iswrite, int blocksize)
 {
     dprintf(16, "ata_pio_transfer id=%p write=%d count=%d bs=%d buf=%p\n"
-            , op->drive_fl, iswrite, op->count, blocksize, op->buf_fl);
+            , op->drive_gf, iswrite, op->count, blocksize, op->buf_fl);
 
     struct atadrive_s *adrive_gf = container_of(
-        op->drive_fl, struct atadrive_s, drive);
+        op->drive_gf, struct atadrive_s, drive);
     struct ata_channel_s *chan_gf = GET_GLOBALFLAT(adrive_gf->chan_gf);
     u16 iobase1 = GET_GLOBALFLAT(chan_gf->iobase1);
     u16 iobase2 = GET_GLOBALFLAT(chan_gf->iobase2);
@@ -289,14 +288,14 @@ ata_pio_transfer(struct disk_op_s *op, int iswrite, int blocksize)
     for (;;) {
         if (iswrite) {
             // Write data to controller
-            dprintf(16, "Write sector id=%p dest=%p\n", op->drive_fl, buf_fl);
+            dprintf(16, "Write sector id=%p dest=%p\n", op->drive_gf, buf_fl);
             if (CONFIG_ATA_PIO32)
                 outsl_fl(iobase1, buf_fl, blocksize / 4);
             else
                 outsw_fl(iobase1, buf_fl, blocksize / 2);
         } else {
             // Read data from controller
-            dprintf(16, "Read sector id=%p dest=%p\n", op->drive_fl, buf_fl);
+            dprintf(16, "Read sector id=%p dest=%p\n", op->drive_gf, buf_fl);
             if (CONFIG_ATA_PIO32)
                 insl_fl(iobase1, buf_fl, blocksize / 4);
             else
@@ -366,7 +365,7 @@ ata_try_dma(struct disk_op_s *op, int iswrite, int blocksize)
         // Need minimum alignment of 1.
         return -1;
     struct atadrive_s *adrive_gf = container_of(
-        op->drive_fl, struct atadrive_s, drive);
+        op->drive_gf, struct atadrive_s, drive);
     struct ata_channel_s *chan_gf = GET_GLOBALFLAT(adrive_gf->chan_gf);
     u16 iomaster = GET_GLOBALFLAT(chan_gf->iomaster);
     if (! iomaster)
@@ -413,10 +412,10 @@ ata_dma_transfer(struct disk_op_s *op)
 {
     if (! CONFIG_ATA_DMA)
         return -1;
-    dprintf(16, "ata_dma_transfer id=%p buf=%p\n", op->drive_fl, op->buf_fl);
+    dprintf(16, "ata_dma_transfer id=%p buf=%p\n", op->drive_gf, op->buf_fl);
 
     struct atadrive_s *adrive_gf = container_of(
-        op->drive_fl, struct atadrive_s, drive);
+        op->drive_gf, struct atadrive_s, drive);
     struct ata_channel_s *chan_gf = GET_GLOBALFLAT(adrive_gf->chan_gf);
     u16 iomaster = GET_GLOBALFLAT(chan_gf->iomaster);
 
@@ -466,7 +465,7 @@ static int
 ata_pio_cmd_data(struct disk_op_s *op, int iswrite, struct ata_pio_command *cmd)
 {
     struct atadrive_s *adrive_gf = container_of(
-        op->drive_fl, struct atadrive_s, drive);
+        op->drive_gf, struct atadrive_s, drive);
     struct ata_channel_s *chan_gf = GET_GLOBALFLAT(adrive_gf->chan_gf);
     u16 iobase1 = GET_GLOBALFLAT(chan_gf->iobase1);
     u16 iobase2 = GET_GLOBALFLAT(chan_gf->iobase2);
@@ -495,7 +494,7 @@ ata_dma_cmd_data(struct disk_op_s *op, struct ata_pio_command *cmd)
     if (! CONFIG_ATA_DMA)
         return -1;
     struct atadrive_s *adrive_gf = container_of(
-        op->drive_fl, struct atadrive_s, drive);
+        op->drive_gf, struct atadrive_s, drive);
     int ret = send_cmd(adrive_gf, cmd);
     if (ret)
         return ret;
@@ -559,7 +558,7 @@ ata_process_op(struct disk_op_s *op)
         return 0;
 
     struct atadrive_s *adrive_gf = container_of(
-        op->drive_fl, struct atadrive_s, drive);
+        op->drive_gf, struct atadrive_s, drive);
     switch (op->command) {
     case CMD_READ:
         return ata_readwrite(op, 0);
@@ -597,7 +596,7 @@ ata_atapi_process_op(struct disk_op_s *op)
         return default_process_op(op);
 
     struct atadrive_s *adrive_gf = container_of(
-        op->drive_fl, struct atadrive_s, drive);
+        op->drive_gf, struct atadrive_s, drive);
     struct ata_channel_s *chan_gf = GET_GLOBALFLAT(adrive_gf->chan_gf);
     u16 iobase1 = GET_GLOBALFLAT(chan_gf->iobase1);
     u16 iobase2 = GET_GLOBALFLAT(chan_gf->iobase2);
@@ -667,7 +666,7 @@ send_ata_identity(struct atadrive_s *adrive, u16 *buffer, int command)
 
     struct disk_op_s dop;
     memset(&dop, 0, sizeof(dop));
-    dop.drive_fl = &adrive->drive;
+    dop.drive_gf = &adrive->drive;
     dop.count = 1;
     dop.lba = 1;
     dop.buf_fl = MAKE_FLATPTR(GET_SEG(SS), buffer);
@@ -946,23 +945,25 @@ init_controller(struct pci_device *pci, int chanid, int irq
 static void
 init_pciata(struct pci_device *pci, u8 prog_if)
 {
-    u8 pciirq = pci_config_readb(pci->bdf, PCI_INTERRUPT_LINE);
+    pci->have_driver = 1;
+    u16 bdf = pci->bdf;
+    u8 pciirq = pci_config_readb(bdf, PCI_INTERRUPT_LINE);
     int master = 0;
     if (CONFIG_ATA_DMA && prog_if & 0x80) {
         // Check for bus-mastering.
-        u32 bar = pci_config_readl(pci->bdf, PCI_BASE_ADDRESS_4);
+        u32 bar = pci_config_readl(bdf, PCI_BASE_ADDRESS_4);
         if (bar & PCI_BASE_ADDRESS_SPACE_IO) {
-            master = pci_enable_iobar(pci, PCI_BASE_ADDRESS_4);
-            pci_enable_busmaster(pci);
+            master = bar & PCI_BASE_ADDRESS_IO_MASK;
+            pci_config_maskw(bdf, PCI_COMMAND, 0, PCI_COMMAND_MASTER);
         }
     }
 
     u32 port1, port2, irq;
     if (prog_if & 1) {
-        port1 = pci_enable_iobar(pci, PCI_BASE_ADDRESS_0);
-        port2 = pci_enable_iobar(pci, PCI_BASE_ADDRESS_1);
-        if (!port1 || !port2)
-            return;
+        port1 = (pci_config_readl(bdf, PCI_BASE_ADDRESS_0)
+                 & PCI_BASE_ADDRESS_IO_MASK);
+        port2 = (pci_config_readl(bdf, PCI_BASE_ADDRESS_1)
+                 & PCI_BASE_ADDRESS_IO_MASK);
         irq = pciirq;
     } else {
         port1 = PORT_ATA1_CMD_BASE;
@@ -972,10 +973,10 @@ init_pciata(struct pci_device *pci, u8 prog_if)
     init_controller(pci, 0, irq, port1, port2, master);
 
     if (prog_if & 4) {
-        port1 = pci_enable_iobar(pci, PCI_BASE_ADDRESS_2);
-        port2 = pci_enable_iobar(pci, PCI_BASE_ADDRESS_3);
-        if (!port1 || !port2)
-            return;
+        port1 = (pci_config_readl(bdf, PCI_BASE_ADDRESS_2)
+                 & PCI_BASE_ADDRESS_IO_MASK);
+        port2 = (pci_config_readl(bdf, PCI_BASE_ADDRESS_3)
+                 & PCI_BASE_ADDRESS_IO_MASK);
         irq = pciirq;
     } else {
         port1 = PORT_ATA2_CMD_BASE;

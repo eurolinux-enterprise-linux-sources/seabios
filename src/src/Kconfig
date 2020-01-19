@@ -208,12 +208,6 @@ menu "Hardware support"
         default y
         help
             Support boot from LSI MegaRAID SAS scsi storage.
-    config MPT_SCSI
-        depends on DRIVES && QEMU_HARDWARE
-        bool "LSI MPT Fusion controllers"
-        default y
-        help
-            Support boot from LSI MPT Fusion scsi storage.
     config FLOPPY
         depends on DRIVES && HARDWARE_IRQ
         bool "Floppy controller"
@@ -227,12 +221,6 @@ menu "Hardware support"
         help
             Support floppy images stored in coreboot flash or from
             QEMU fw_cfg.
-    config NVME
-        depends on DRIVES
-        bool "NVMe controllers"
-        default y
-        help
-            Support for NVMe disk code.
 
     config PS2PORT
         depends on KEYBOARD || MOUSE
@@ -306,11 +294,6 @@ menu "Hardware support"
         default y
         help
             Support serial ports.  This also enables int 14 serial port calls.
-    config SERCON
-        bool "Serial console"
-        default y
-        help
-            Support redirecting vga output to the serial console.
     config LPT
         bool "Parallel port"
         default y
@@ -406,6 +389,14 @@ menu "BIOS interfaces"
         default y
         help
             Support finding and running option roms during POST.
+    config OPTIONROMS_DEPLOYED
+        depends on OPTIONROMS && QEMU
+        bool "Option roms are already at 0xc0000-0xf0000"
+        default n
+        help
+            Select this if option ROMs are already copied to
+            0xc0000-0xf0000.  This must only be selected when using
+            Bochs or QEMU versions older than 0.12.
     config PMM
         depends on OPTIONROMS
         bool "PMM interface"
@@ -543,19 +534,6 @@ menu "Debugging"
         default 0x3f8
         help
             Base port for serial - generally 0x3f8, 0x2f8, 0x3e8, or 0x2e8.
-   config DEBUG_SERIAL_MMIO
-        depends on DEBUG_LEVEL != 0 && !DEBUG_SERIAL
-        bool "Serial port debugging via memory mapped IO"
-        default n
-        help
-            Send debugging information to serial port mapped in memory.
-   config DEBUG_SERIAL_MEM_ADDRESS
-        depends on DEBUG_SERIAL_MMIO
-        hex "Serial port memory mapped IO address"
-        help
-            On some chipsets the serial port is memory mapped, in those cases
-            provide the 32 bit address. E.g. 0xFEDC6000 for the AMD Kern
-            (a.k.a Hudson UART).
 
     config DEBUG_IO
         depends on QEMU_HARDWARE && DEBUG_LEVEL != 0
