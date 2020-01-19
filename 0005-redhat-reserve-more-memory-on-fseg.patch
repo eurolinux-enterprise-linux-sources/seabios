@@ -1,4 +1,4 @@
-From 4dcafd1a32949713abe7b5842cfebf851934ecb7 Mon Sep 17 00:00:00 2001
+From cd088ce3bc68a6986637c0cd77b94ebff729b89b Mon Sep 17 00:00:00 2001
 From: Gerd Hoffmann <kraxel@redhat.com>
 Date: Tue, 19 Apr 2016 11:27:50 +0200
 Subject: redhat: reserve more memory on fseg

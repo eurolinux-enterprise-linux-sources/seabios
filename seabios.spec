@@ -1,6 +1,6 @@
 Name:           seabios
-Version:        1.10.2
-Release:        3%{?dist}
+Version:        1.11.0
+Release:        2%{?dist}
 Summary:        Open-source legacy BIOS implementation
 
 Group:          Applications/Emulators
@@ -8,7 +8,7 @@ License:        LGPLv3
 URL:            http://www.coreboot.org/SeaBIOS
 
 
-Source0: http://code.coreboot.org/p/seabios/downloads/get/seabios-1.10.2.tar.gz
+Source0: https://code.coreboot.org/p/seabios/downloads/get/seabios-1.11.0.tar.gz
 
 Source10:       config.vga.cirrus
 Source11:       config.vga.isavga
@@ -20,21 +20,13 @@ Source16:       config.base-256k
 Source17:       config.vga.virtio
 
 
-Patch2: 0002-allow-1TB-of-RAM.patch
-Patch3: 0003-smbios-set-bios-vendor-version-fields-to-Seabios-0.5.patch
-Patch4: 0004-Workaround-for-a-win8.1-32-S4-resume-bug.patch
-Patch5: 0005-redhat-reserve-more-memory-on-fseg.patch
-Patch6: 0006-vgabios-Reorder-video-modes-to-work-around-a-Windows.patch
-# For bz#1428347 - reboot hangs on rhel6 machine types (~1/20 times)
-Patch7: seabios-resume-Don-t-attempt-to-use-generic-reboot-mechanism.patch
-# For bz#1020622 - seabios fail to recognize virtio-scsi device if specify LUN not 0
-Patch8: seabios-blockcmd-accept-only-disks-and-CD-ROMs.patch
-# For bz#1020622 - seabios fail to recognize virtio-scsi device if specify LUN not 0
-Patch9: seabios-blockcmd-generic-SCSI-luns-enumeration.patch
-# For bz#1020622 - seabios fail to recognize virtio-scsi device if specify LUN not 0
-Patch10: seabios-virtio-scsi-enumerate-luns-with-REPORT-LUNS.patch
-# For bz#1020622 - seabios fail to recognize virtio-scsi device if specify LUN not 0
-Patch11: seabios-usb-uas-enumerate-luns-with-REPORT-LUNS.patch
+Patch0002: 0002-allow-1TB-of-RAM.patch
+Patch0003: 0003-smbios-set-bios-vendor-version-fields-to-Seabios-0.5.patch
+Patch0004: 0004-Workaround-for-a-win8.1-32-S4-resume-bug.patch
+Patch0005: 0005-redhat-reserve-more-memory-on-fseg.patch
+Patch0006: 0006-vgabios-Reorder-video-modes-to-work-around-a-Windows.patch
+# For bz#1523166 - [Q35] guest kernel panic when boot with 9 nics
+Patch7: seabios-pci-fix-io-hints-capability-for-RedHat-PCI-bridges.patch
 BuildRequires: python iasl
 ExclusiveArch: x86_64 %{power64}
 
@@ -85,16 +77,12 @@ SeaVGABIOS is an open-source VGABIOS implementation.
 %prep
 %setup -q
 
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-%patch5 -p1
-%patch6 -p1
+%patch0002 -p1
+%patch0003 -p1
+%patch0004 -p1
+%patch0005 -p1
+%patch0006 -p1
 %patch7 -p1
-%patch8 -p1
-%patch9 -p1
-%patch10 -p1
-%patch11 -p1
 
 %build
 %ifarch x86_64
@@ -147,6 +135,31 @@ install -m 0644 binaries/vgabios*.bin $RPM_BUILD_ROOT%{_datadir}/seavgabios
 %endif
 
 %changelog
+* Tue Jan 30 2018 Miroslav Rezanina <mrezanin@redhat.com> - 1.11.0-2.el7
+- seabios-pci-fix-io-hints-capability-for-RedHat-PCI-bridges.patch [bz#1523166]
+- Resolves: bz#1523166
+  ([Q35] guest kernel panic when boot with 9 nics)
+
+* Wed Nov 15 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.11.0-1.el7
+- Rebase to 1.11.0 [bz#1470751]
+- Resolves: bz#1470751
+  (Rebase seabios for RHEL-7.5)
+
+* Fri Oct 20 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.10.2-5.el7
+- seabios-boot-Rename-drive_g-to-drive.patch [bz#1452603]
+- seabios-disk-Don-t-require-the-struct-drive_s-to-be-in-the-f.patch [bz#1452603]
+- seabios-block-Rename-disk_op_s-drive_gf-to-drive_fl.patch [bz#1452603]
+- seabios-virtio-Allocate-drive_s-storage-in-low-memory.patch [bz#1452603]
+- Resolves: bz#1452603
+  (can't bootup from image when attached multi-virtio-scsi disks with multi-luns)
+
+* Thu Sep 28 2017 Wainer dos Santos Moschetta <wainersm@redhat.com> - 1.10.2-4.el7
+- seabios-virtio-IOMMU-support.patch [bz#1463163, bz#1467811]
+- Resolves: bz#1463163
+  (Guest OS will down when disk enable the IOMMU for Virtio)
+- Resolves: bz#1467811
+  (Guest OS will down when disk enable the IOMMU for virtio-scsi)
+
 * Fri May 12 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.10.2-3.el7
 - seabios-blockcmd-accept-only-disks-and-CD-ROMs.patch [bz#1020622]
 - seabios-blockcmd-generic-SCSI-luns-enumeration.patch [bz#1020622]

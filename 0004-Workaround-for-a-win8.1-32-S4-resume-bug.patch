@@ -1,4 +1,4 @@
-From 18be18890b42ad842b421bc82af75a86eae5580a Mon Sep 17 00:00:00 2001
+From 0c1e0d59ceb3c4c8909d7a7b6e62d19c7ad81bef Mon Sep 17 00:00:00 2001
 From: Radim Krcmar <rkrcmar@redhat.com>
 Date: Mon, 10 Mar 2014 15:14:27 +0100
 Subject: Workaround for a win8.1-32 S4 resume bug
@@ -51,10 +51,10 @@ Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/src/clock.c b/src/clock.c
-index e83e0f3..bca5cd7 100644
+index e44e112..298a722 100644
 --- a/src/clock.c
 +++ b/src/clock.c
-@@ -308,7 +308,13 @@ handle_08(void)
+@@ -309,7 +309,13 @@ handle_08(void)
      struct bregs br;
      memset(&br, 0, sizeof(br));
      br.flags = F_IF;

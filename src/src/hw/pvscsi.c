@@ -213,7 +213,7 @@ pvscsi_process_op(struct disk_op_s *op)
     if (!CONFIG_PVSCSI)
         return DISK_RET_EBADTRACK;
     struct pvscsi_lun_s *plun =
-        container_of(op->drive_gf, struct pvscsi_lun_s, drive);
+        container_of(op->drive_fl, struct pvscsi_lun_s, drive);
     struct pvscsi_ring_dsc_s *ring_dsc = plun->ring_dsc;
     struct PVSCSIRingsState *s = ring_dsc->ring_state;
     u32 req_entries = s->reqNumEntriesLog2;
@@ -290,7 +290,7 @@ static void
 pvscsi_scan_target(struct pci_device *pci, void *iobase,
                    struct pvscsi_ring_dsc_s *ring_dsc, u8 target)
 {
-    /* TODO: send REPORT LUNS.  For now, only LUN 0 is recognized.  */
+    /* pvscsi has no more than a single lun per target */
     pvscsi_add_lun(pci, iobase, ring_dsc, target, 0);
 }
 

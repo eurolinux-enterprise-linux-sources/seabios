@@ -3,6 +3,8 @@
 
 #include "types.h" // u32
 
+#define PORT_PCI_REBOOT        0x0cf9
+
 static inline u8 pci_bdf_to_bus(u16 bdf) {
     return bdf >> 8;
 }
@@ -37,6 +39,7 @@ u32 pci_config_readl(u16 bdf, u32 addr);
 u16 pci_config_readw(u16 bdf, u32 addr);
 u8 pci_config_readb(u16 bdf, u32 addr);
 void pci_config_maskw(u16 bdf, u32 addr, u16 off, u16 on);
+u8 pci_find_capability(u16 bdf, u8 cap_id, u8 cap);
 int pci_next(int bdf, int bus);
 int pci_probe_host(void);
 void pci_reboot(void);

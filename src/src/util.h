@@ -72,6 +72,7 @@ extern struct rsdp_descriptor *RsdpAddr;
 extern u32 acpi_pm1a_cnt;
 extern u16 acpi_pm_base;
 void *find_acpi_rsdp(void);
+void *find_acpi_table(u32 signature);
 u32 find_resume_vector(void);
 void acpi_reboot(void);
 void find_acpi_features(void);
@@ -122,7 +123,7 @@ void pirtable_setup(void);
 // fw/shadow.c
 void make_bios_writable(void);
 void make_bios_readonly(void);
-void qemu_prep_reset(void);
+void qemu_reboot(void);
 
 // fw/smbios.c
 void smbios_legacy_setup(void);
@@ -185,6 +186,8 @@ int jpeg_show(struct jpeg_decdata *jpeg, unsigned char *pic, int width
 void kbd_init(void);
 void handle_15c2(struct bregs *regs);
 void process_key(u8 key);
+u8 enqueue_key(u16 keycode);
+u16 ascii_to_keycode(u8 ascii);
 
 // misc.c
 extern int HaveRunPost;
@@ -227,6 +230,10 @@ void prepareboot(void);
 void startBoot(void);
 void reloc_preinit(void *f, void *arg);
 void code_mutable_preinit(void);
+
+// sercon.c
+void sercon_setup(void);
+void sercon_check_event(void);
 
 // serial.c
 void serial_setup(void);

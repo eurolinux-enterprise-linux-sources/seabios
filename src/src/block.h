@@ -10,7 +10,7 @@
 
 struct disk_op_s {
     void *buf_fl;
-    struct drive_s *drive_gf;
+    struct drive_s *drive_fl;
     u8 command;
     u16 count;
     union {
@@ -82,6 +82,7 @@ struct drive_s {
 #define DTYPE_PVSCSI       0x83
 #define DTYPE_MPT_SCSI     0x84
 #define DTYPE_SDCARD       0x90
+#define DTYPE_NVME         0x91
 
 #define MAXDESCSIZE 80
 
@@ -111,7 +112,7 @@ void map_floppy_drive(struct drive_s *drive);
 void map_hd_drive(struct drive_s *drive);
 void map_cd_drive(struct drive_s *drive);
 struct int13dpt_s;
-int fill_edd(struct segoff_s edd, struct drive_s *drive_gf);
+int fill_edd(struct segoff_s edd, struct drive_s *drive_fl);
 void block_setup(void);
 int default_process_op(struct disk_op_s *op);
 int process_op(struct disk_op_s *op);

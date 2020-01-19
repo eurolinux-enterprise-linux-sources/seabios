@@ -1,4 +1,4 @@
-From 2bcdafa98a14ac600bde1e4e9cb5bc07c01fd366 Mon Sep 17 00:00:00 2001
+From dc14406bae91025709995342c1297d4e2c325498 Mon Sep 17 00:00:00 2001
 From: Gerd Hoffmann <kraxel@redhat.com>
 Date: Mon, 28 Jul 2014 12:14:11 +0200
 Subject: smbios: set bios vendor/version fields to Seabios/0.5.1

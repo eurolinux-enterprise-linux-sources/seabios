@@ -130,7 +130,6 @@ static int ahci_command(struct ahci_port_s *port_gf, int iswrite, int isatapi,
     intbits = ahci_port_readl(ctrl, pnr, PORT_IRQ_STAT);
     if (intbits)
         ahci_port_writel(ctrl, pnr, PORT_IRQ_STAT, intbits);
-    ahci_port_writel(ctrl, pnr, PORT_SCR_ACT, 1);
     ahci_port_writel(ctrl, pnr, PORT_CMD_ISSUE, 1);
 
     u32 end = timer_calc(AHCI_REQUEST_TIMEOUT);
@@ -218,7 +217,7 @@ int ahci_atapi_process_op(struct disk_op_s *op)
         return 0;
 
     struct ahci_port_s *port_gf = container_of(
-        op->drive_gf, struct ahci_port_s, drive);
+        op->drive_fl, struct ahci_port_s, drive);
     struct ahci_cmd_s *cmd = port_gf->cmd;
 
     if (op->command == CMD_WRITE || op->command == CMD_FORMAT)
@@ -238,7 +237,7 @@ static int
 ahci_disk_readwrite_aligned(struct disk_op_s *op, int iswrite)
 {
     struct ahci_port_s *port_gf = container_of(
-        op->drive_gf, struct ahci_port_s, drive);
+        op->drive_fl, struct ahci_port_s, drive);
     struct ahci_cmd_s *cmd = port_gf->cmd;
     int rc;
 

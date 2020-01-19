@@ -14,6 +14,7 @@
 #include "hw/pci.h" // pci_config_readw
 #include "hw/pcidevice.h" // pci_probe_devices
 #include "hw/pci_regs.h" // PCI_DEVICE_ID
+#include "hw/serialio.h" // PORT_SERIAL1
 #include "hw/rtc.h" // CMOS_*
 #include "malloc.h" // malloc_tmp
 #include "output.h" // dprintf
@@ -32,8 +33,15 @@ u32 RamSize;
 u64 RamSizeOver4G;
 // Type of emulator platform.
 int PlatformRunningOn VARFSEG;
+// cfg enabled
+int cfg_enabled = 0;
 // cfg_dma enabled
 int cfg_dma_enabled = 0;
+
+inline int qemu_cfg_enabled(void)
+{
+    return cfg_enabled;
+}
 
 inline int qemu_cfg_dma_enabled(void)
 {
@@ -203,6 +211,7 @@ qemu_platform_setup(void)
 #define QEMU_CFG_SIGNATURE              0x00
 #define QEMU_CFG_ID                     0x01
 #define QEMU_CFG_UUID                   0x02
+#define QEMU_CFG_NOGRAPHIC              0x04
 #define QEMU_CFG_NUMA                   0x0d
 #define QEMU_CFG_BOOT_MENU              0x0e
 #define QEMU_CFG_NB_CPUS                0x05
@@ -392,7 +401,9 @@ u16
 qemu_get_present_cpus_count(void)
 {
     u16 smp_count = 0;
-    qemu_cfg_read_entry(&smp_count, QEMU_CFG_NB_CPUS, sizeof(smp_count));
+    if (qemu_cfg_enabled()) {
+        qemu_cfg_read_entry(&smp_count, QEMU_CFG_NB_CPUS, sizeof(smp_count));
+    }
     u16 cmos_cpu_count = rtc_read(CMOS_BIOS_SMP_COUNT) + 1;
     if (smp_count < cmos_cpu_count) {
         smp_count = cmos_cpu_count;
@@ -502,6 +513,12 @@ qemu_cfg_legacy(void)
     qemu_romfile_add("etc/irq0-override", QEMU_CFG_IRQ0_OVERRIDE, 0, 1);
     qemu_romfile_add("etc/max-cpus", QEMU_CFG_MAX_CPUS, 0, 2);
 
+    // serial console
+    u16 nogfx = 0;
+    qemu_cfg_read_entry(&nogfx, QEMU_CFG_NOGRAPHIC, sizeof(nogfx));
+    if (nogfx)
+        const_romfile_add_int("etc/sercon-port", PORT_SERIAL1);
+
     // NUMA data
     u64 numacount;
     qemu_cfg_read_entry(&numacount, QEMU_CFG_NUMA, sizeof(numacount));
@@ -571,6 +588,7 @@ void qemu_cfg_init(void)
             return;
 
     dprintf(1, "Found QEMU fw_cfg\n");
+    cfg_enabled = 1;
 
     // Detect DMA interface.
     u32 id;

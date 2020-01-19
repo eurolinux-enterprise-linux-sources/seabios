@@ -1,0 +1,73 @@
+From c449d0540e5f990d2710812cc4b4c35699ffd82e Mon Sep 17 00:00:00 2001
+From: Marcel Apfelbaum <marcel@redhat.com>
+Date: Wed, 17 Jan 2018 20:13:10 +0100
+Subject: [PATCH] pci: fix 'io hints' capability for RedHat PCI bridges
+
+RH-Author: Marcel Apfelbaum <marcel@redhat.com>
+Message-id: <20180117201310.18787-1-marcel@redhat.com>
+Patchwork-id: 78658
+O-Subject: [RHEL-7.5 seabios PATCH] pci: fix 'io hints' capability for RedHat PCI bridges
+Bugzilla: 1523166
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Gerd Hoffmann <kraxel@redhat.com>
+RH-Acked-by: Miroslav Rezanina <mrezanin@redhat.com>
+
+Commit ec6cb17f (pci: enable RedHat PCI bridges to reserve additional
+                 resources on PCI init)
+added a new vendor specific PCI capability for RedHat PCI bridges
+allowing them to reserve additional buses and/or IO/MEM space.
+
+When adding the IO hints PCI capability to the pcie-root-port
+without specifying a value for bus reservation, the subordinate bus
+computation is wrong and the guest kernel gets messed up.
+
+Fix it by returning to prev code if the value for bus
+reservation is not set.
+
+Removed also a wrong debug print "PCI: invalid QEMU resource reserve
+cap offset" which appears if the 'IO hints' capability is not present.
+
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Marcel Apfelbaum <marcel@redhat.com>
+(cherry picked from commit 14d91c353e19b7085fdbb7b2dcc43f3355665670)
+Signed-off-by: Marcel Apfelbaum <marcel@redhat.com>
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ src/fw/pciinit.c | 14 +++++---------
+ 1 file changed, 5 insertions(+), 9 deletions(-)
+
+diff --git a/src/fw/pciinit.c b/src/fw/pciinit.c
+index 7f0e439..3a2f747 100644
+--- a/src/fw/pciinit.c
++++ b/src/fw/pciinit.c
+@@ -540,8 +540,6 @@ static u8 pci_find_resource_reserve_capability(u16 bdf)
+                 dprintf(1, "PCI: QEMU resource reserve cap length %d is invalid\n",
+                         cap_len);
+             }
+-        } else {
+-            dprintf(1, "PCI: invalid QEMU resource reserve cap offset\n");
+         }
+         return cap;
+     } else {
+@@ -619,13 +617,11 @@ pci_bios_init_bus_rec(int bus, u8 *pci_bus)
+                                 res_bus);
+                         res_bus = 0;
+                     }
+-                }
+-                if (secbus + res_bus > *pci_bus) {
+-                    dprintf(1, "PCI: QEMU resource reserve cap: bus = %u\n",
+-                            res_bus);
+-                    res_bus = secbus + res_bus;
+-                } else {
+-                    res_bus = *pci_bus;
++                    if (secbus + res_bus > *pci_bus) {
++                        dprintf(1, "PCI: QEMU resource reserve cap: bus = %u\n",
++                                res_bus);
++                        res_bus = secbus + res_bus;
++                    }
+                 }
+             }
+             dprintf(1, "PCI: subordinate bus = 0x%x -> 0x%x\n",
+-- 
+1.8.3.1
+
