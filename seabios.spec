@@ -1,6 +1,6 @@
 Name:           seabios
 Version:        1.9.1
-Release:        5%{?dist}.2
+Release:        5%{?dist}.3
 Summary:        Open-source legacy BIOS implementation
 
 Group:          Applications/Emulators
@@ -39,6 +39,10 @@ Patch10: seabios-acpi_extract-Make-the-generated-.hex-files-more-huma.patch
 Patch11: seabios-acpi_extract-Don-t-generate-unused-and-empty-q35-acp.patch
 # For bz#1400102 - decouple the SeaBIOS build from iasl
 Patch12: seabios-acpi-Don-t-build-SSDT-files-on-every-build-store-the.patch
+# For bz#1440706 - reboot hangs on rhel6 machine types (~1/20 times)
+Patch13: seabios-resume-Make-KVM-soft-reboot-loop-detection-more-flex.patch
+# For bz#1440706 - reboot hangs on rhel6 machine types (~1/20 times)
+Patch14: seabios-resume-Don-t-attempt-to-use-generic-reboot-mechanism.patch
 BuildRequires: python iasl
 ExclusiveArch: x86_64 %{power64}
 
@@ -100,6 +104,8 @@ SeaVGABIOS is an open-source VGABIOS implementation.
 %patch10 -p1
 %patch11 -p1
 %patch12 -p1
+%patch13 -p1
+%patch14 -p1
 
 # Store version to be used
 
@@ -154,6 +160,12 @@ install -m 0644 binaries/vgabios*.bin $RPM_BUILD_ROOT%{_datadir}/seavgabios
 %endif
 
 %changelog
+* Thu May 11 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.9.1-5.el7_3.3
+- seabios-resume-Make-KVM-soft-reboot-loop-detection-more-flex.patch [bz#1440706]
+- seabios-resume-Don-t-attempt-to-use-generic-reboot-mechanism.patch [bz#1440706]
+- Resolves: bz#1440706
+  (reboot hangs on rhel6 machine types (~1/20 times))
+
 * Fri Feb 10 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.9.1-5.el7_3.2
 - seabios-acpi_extract-Move-main-code-to-new-function-main.patch [bz#1400102]
 - seabios-acpi_extract-Make-the-generated-.hex-files-more-huma.patch [bz#1400102]

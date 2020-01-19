@@ -1,0 +1,81 @@
+From 51e8e987d3156c4a16428f922b1c0e5984451c39 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 12 Apr 2017 06:36:20 +0200
+Subject: [PATCH 1/2] resume: Make KVM soft reboot loop detection more flexible
+
+RH-Author: Gerd Hoffmann <kraxel@redhat.com>
+Message-id: <20170412063621.25904-2-kraxel@redhat.com>
+Patchwork-id: 74685
+O-Subject: [RHEL-7.3.z seabios PATCH 1/2] resume: Make KVM soft reboot loop detection more flexible
+Bugzilla: 1440706
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Dr. David Alan Gilbert <dgilbert@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+Move the check for soft reboot loops from resume.c to shadow.c and
+directly check for the case where the copy of the BIOS in flash
+appears to be a memory alias instead.  This prevents a hang if an
+external reboot request occurs during the BIOS memcpy.
+
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+(cherry picked from commit b837e68d5a6c1a5945513f1995875445a1594c8a)
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ src/fw/shadow.c | 15 +++++++++++++--
+ src/resume.c    |  9 ---------
+ 2 files changed, 13 insertions(+), 11 deletions(-)
+
+diff --git a/src/fw/shadow.c b/src/fw/shadow.c
+index ee87d36..4486884 100644
+--- a/src/fw/shadow.c
++++ b/src/fw/shadow.c
+@@ -163,7 +163,18 @@ qemu_prep_reset(void)
+         return;
+     // QEMU doesn't map 0xc0000-0xfffff back to the original rom on a
+     // reset, so do that manually before invoking a hard reset.
++    void *cstart = VSYMBOL(code32flat_start), *cend = VSYMBOL(code32flat_end);
++    void *hrp = &HaveRunPost;
++    if (readl(hrp + BIOS_SRC_OFFSET)) {
++        // Some old versions of KVM don't store a pristine copy of the
++        // BIOS in high memory.  Try to shutdown the machine instead.
++        dprintf(1, "Unable to hard-reboot machine - attempting shutdown.\n");
++        apm_shutdown();
++    }
++    // Copy the BIOS making sure to only reset HaveRunPost at end
+     make_bios_writable();
+-    memcpy(VSYMBOL(code32flat_start), VSYMBOL(code32flat_start) + BIOS_SRC_OFFSET
+-           , SYMBOL(code32flat_end) - SYMBOL(code32flat_start));
++    memcpy(cstart, cstart + BIOS_SRC_OFFSET, hrp - cstart);
++    memcpy(hrp + 4, hrp + 4 + BIOS_SRC_OFFSET, cend - (hrp + 4));
++    barrier();
++    HaveRunPost = 0;
+ }
+diff --git a/src/resume.c b/src/resume.c
+index a5465d8..afeadcf 100644
+--- a/src/resume.c
++++ b/src/resume.c
+@@ -114,19 +114,10 @@ s3_resume(void)
+     farcall16big(&br);
+ }
+ 
+-u8 HaveAttemptedReboot VARLOW;
+-
+ // Attempt to invoke a hard-reboot.
+ static void
+ tryReboot(void)
+ {
+-    if (HaveAttemptedReboot) {
+-        // Hard reboot has failed - try to shutdown machine.
+-        dprintf(1, "Unable to hard-reboot machine - attempting shutdown.\n");
+-        apm_shutdown();
+-    }
+-    HaveAttemptedReboot = 1;
+-
+     dprintf(1, "Attempting a hard reboot\n");
+ 
+     // Setup for reset on qemu.
+-- 
+1.8.3.1
+

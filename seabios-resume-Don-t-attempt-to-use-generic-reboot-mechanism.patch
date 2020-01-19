@@ -1,0 +1,103 @@
+From 18b770a509ef5d3404f1ddfae74c019d7029445e Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 12 Apr 2017 06:36:21 +0200
+Subject: [PATCH 2/2] resume: Don't attempt to use generic reboot mechanisms on
+ QEMU
+
+RH-Author: Gerd Hoffmann <kraxel@redhat.com>
+Message-id: <20170412063621.25904-3-kraxel@redhat.com>
+Patchwork-id: 74683
+O-Subject: [RHEL-7.3.z seabios PATCH 2/2] resume: Don't attempt to use generic reboot mechanisms on QEMU
+Bugzilla: 1440706
+RH-Acked-by: Laszlo Ersek <lersek@redhat.com>
+RH-Acked-by: Paolo Bonzini <pbonzini@redhat.com>
+RH-Acked-by: Dr. David Alan Gilbert <dgilbert@redhat.com>
+
+From: Kevin O'Connor <kevin@koconnor.net>
+
+On QEMU it's necessary to manually reset the BIOS memory region
+between 0xc0000-0x100000 on a reboot.  After this manual memory reset
+is completed, it's not valid to use the generic reset mechanisms.
+Rename qemu_prep_reset() to qemu_reboot() and change the function to
+immediately reboot after the code memcpy.
+
+This fixes a bug that could cause code corruption on reboots - calling
+the udelay() function (as invoked by i8042_reboot and/or pci_reboot)
+was not valid after the BIOS was memcpy'd.
+
+RHEL-7.3.z note: no need to move PORT_PCI_REBOOT around, we don't
+have upstream 4d8510cdcca0 ("pci: Split low-level pci code from
+higher-level 'struct pci_device' code", 2016-02-03).
+
+Reported-by: "Dr. David Alan Gilbert" <dgilbert@redhat.com>
+Tested-by: Dr. David Alan Gilbert <dgilbert@redhat.com>
+Signed-off-by: Kevin O'Connor <kevin@koconnor.net>
+(cherry picked from commit c68aff57ce317d9f2d69d20eba893a10d964f316)
+Signed-off-by: Miroslav Rezanina <mrezanin@redhat.com>
+---
+ src/fw/shadow.c | 14 +++++++++++++-
+ src/resume.c    |  4 ++--
+ src/util.h      |  2 +-
+ 3 files changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/src/fw/shadow.c b/src/fw/shadow.c
+index 4486884..e91202a 100644
+--- a/src/fw/shadow.c
++++ b/src/fw/shadow.c
+@@ -157,7 +157,7 @@ make_bios_readonly(void)
+ }
+ 
+ void
+-qemu_prep_reset(void)
++qemu_reboot(void)
+ {
+     if (!CONFIG_QEMU || runningOnXen())
+         return;
+@@ -177,4 +177,16 @@ qemu_prep_reset(void)
+     memcpy(hrp + 4, hrp + 4 + BIOS_SRC_OFFSET, cend - (hrp + 4));
+     barrier();
+     HaveRunPost = 0;
++    barrier();
++
++    // Request a QEMU system reset.  Do the reset in this function as
++    // the BIOS code was overwritten above and not all BIOS
++    // functionality may be available.
++
++    // Attempt PCI style reset
++    outb(0x02, PORT_PCI_REBOOT);
++    outb(0x06, PORT_PCI_REBOOT);
++
++    // Next try triple faulting the CPU to force a reset
++    asm volatile("int3");
+ }
+diff --git a/src/resume.c b/src/resume.c
+index afeadcf..9f264fb 100644
+--- a/src/resume.c
++++ b/src/resume.c
+@@ -120,8 +120,8 @@ tryReboot(void)
+ {
+     dprintf(1, "Attempting a hard reboot\n");
+ 
+-    // Setup for reset on qemu.
+-    qemu_prep_reset();
++    // Use a QEMU specific reboot on QEMU
++    qemu_reboot();
+ 
+     // Reboot using ACPI RESET_REG
+     acpi_reboot();
+diff --git a/src/util.h b/src/util.h
+index cba3359..b6b7dd3 100644
+--- a/src/util.h
++++ b/src/util.h
+@@ -119,7 +119,7 @@ void pirtable_setup(void);
+ // fw/shadow.c
+ void make_bios_writable(void);
+ void make_bios_readonly(void);
+-void qemu_prep_reset(void);
++void qemu_reboot(void);
+ 
+ // fw/smbios.c
+ void smbios_legacy_setup(void);
+-- 
+1.8.3.1
+
