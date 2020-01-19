@@ -1,6 +1,6 @@
 Name:           seabios
 Version:        1.10.2
-Release:        3%{?dist}
+Release:        3%{?dist}.1
 Summary:        Open-source legacy BIOS implementation
 
 Group:          Applications/Emulators
@@ -35,6 +35,8 @@ Patch9: seabios-blockcmd-generic-SCSI-luns-enumeration.patch
 Patch10: seabios-virtio-scsi-enumerate-luns-with-REPORT-LUNS.patch
 # For bz#1020622 - seabios fail to recognize virtio-scsi device if specify LUN not 0
 Patch11: seabios-usb-uas-enumerate-luns-with-REPORT-LUNS.patch
+# For bz#1472131 - Guest OS will down when disk enable the IOMMU for Virtio
+Patch12: seabios-virtio-IOMMU-support.patch
 BuildRequires: python iasl
 ExclusiveArch: x86_64 %{power64}
 
@@ -95,6 +97,7 @@ SeaVGABIOS is an open-source VGABIOS implementation.
 %patch9 -p1
 %patch10 -p1
 %patch11 -p1
+%patch12 -p1
 
 %build
 %ifarch x86_64
@@ -147,6 +150,11 @@ install -m 0644 binaries/vgabios*.bin $RPM_BUILD_ROOT%{_datadir}/seavgabios
 %endif
 
 %changelog
+* Wed Jul 26 2017 Danilo Cesar Lemes de Paula <ddepaula@redhat.com> - 1.10.2-3.el7_4.1
+- seabios-virtio-IOMMU-support.patch [bz#1472131]
+- Resolves: bz#1472131
+  (Guest OS will down when disk enable the IOMMU for Virtio)
+
 * Fri May 12 2017 Miroslav Rezanina <mrezanin@redhat.com> - 1.10.2-3.el7
 - seabios-blockcmd-accept-only-disks-and-CD-ROMs.patch [bz#1020622]
 - seabios-blockcmd-generic-SCSI-luns-enumeration.patch [bz#1020622]

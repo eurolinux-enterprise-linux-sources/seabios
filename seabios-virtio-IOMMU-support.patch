@@ -1,0 +1,87 @@
+From 15fc9e09377bdbe516f83fd0497c583ab7a58b23 Mon Sep 17 00:00:00 2001
+From: Xiao Wang <jasowang@redhat.com>
+Date: Tue, 18 Jul 2017 06:42:01 +0100
+Subject: [PATCH] virtio: IOMMU support
+
+RH-Author: Xiao Wang <jasowang@redhat.com>
+Message-id: <1500360121-31384-1-git-send-email-jasowang@redhat.com>
+Patchwork-id: 75797
+O-Subject: [RHEL7.4z seabios PATCH] virtio: IOMMU support
+Bugzilla: 1467811 1472131
+RH-Acked-by: wexu@redhat.com
+RH-Acked-by: Jens Freimann <jfreimann@redhat.com>
+RH-Acked-by: Maxime Coquelin <maxime.coquelin@redhat.com>
+RH-Acked-by: Michael S. Tsirkin <mst@redhat.com>
+
+Bugzilla: 1463163, 1467811
+Brew Build: https://brewweb.engineering.redhat.com/brew/taskinfo?taskID=13673302
+Test status: Tested by my self
+
+Since we don't enable IOMMU at all, we can then simply enable the
+IOMMU support by claiming the support of VIRITO_F_IOMMU_PLATFORM. This
+fixes booting failure when iommu_platform is set from qemu cli.
+
+Acked-by: Michael S. Tsirkin <mst@redhat.com>
+Signed-off-by: Jason Wang <jasowang@redhat.com>
+(cherry picked from commit dd9bba5b9c1d5175a2757f3fdc9d554b4c8eea3a)
+Signed-off-by: Danilo C. L. de Paula <ddepaula@redhat.com>
+---
+ src/hw/virtio-blk.c  | 3 ++-
+ src/hw/virtio-ring.h | 1 +
+ src/hw/virtio-scsi.c | 3 ++-
+ 3 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/hw/virtio-blk.c b/src/hw/virtio-blk.c
+index dca7855..901b8f5 100644
+--- a/src/hw/virtio-blk.c
++++ b/src/hw/virtio-blk.c
+@@ -118,13 +118,14 @@ init_virtio_blk(void *data)
+         struct vp_device *vp = &vdrive->vp;
+         u64 features = vp_get_features(vp);
+         u64 version1 = 1ull << VIRTIO_F_VERSION_1;
++        u64 iommu_platform = 1ull << VIRTIO_F_IOMMU_PLATFORM;
+         u64 blk_size = 1ull << VIRTIO_BLK_F_BLK_SIZE;
+         if (!(features & version1)) {
+             dprintf(1, "modern device without virtio_1 feature bit: %pP\n", pci);
+             goto fail;
+         }
+ 
+-        features = features & (version1 | blk_size);
++        features = features & (version1 | iommu_platform | blk_size);
+         vp_set_features(vp, features);
+         status |= VIRTIO_CONFIG_S_FEATURES_OK;
+         vp_set_status(vp, status);
+diff --git a/src/hw/virtio-ring.h b/src/hw/virtio-ring.h
+index 7665fd5..8604a01 100644
+--- a/src/hw/virtio-ring.h
++++ b/src/hw/virtio-ring.h
+@@ -18,6 +18,7 @@
+ 
+ /* v1.0 compliant. */
+ #define VIRTIO_F_VERSION_1              32
++#define VIRTIO_F_IOMMU_PLATFORM         33
+ 
+ #define MAX_QUEUE_NUM      (128)
+ 
+diff --git a/src/hw/virtio-scsi.c b/src/hw/virtio-scsi.c
+index 7490ec0..4eea5c3 100644
+--- a/src/hw/virtio-scsi.c
++++ b/src/hw/virtio-scsi.c
+@@ -163,12 +163,13 @@ init_virtio_scsi(void *data)
+     if (vp->use_modern) {
+         u64 features = vp_get_features(vp);
+         u64 version1 = 1ull << VIRTIO_F_VERSION_1;
++        u64 iommu_platform = 1ull << VIRTIO_F_IOMMU_PLATFORM;
+         if (!(features & version1)) {
+             dprintf(1, "modern device without virtio_1 feature bit: %pP\n", pci);
+             goto fail;
+         }
+ 
+-        vp_set_features(vp, version1);
++        vp_set_features(vp, features & (version1 | iommu_platform));
+         status |= VIRTIO_CONFIG_S_FEATURES_OK;
+         vp_set_status(vp, status);
+         if (!(vp_get_status(vp) & VIRTIO_CONFIG_S_FEATURES_OK)) {
+-- 
+1.8.3.1
+
